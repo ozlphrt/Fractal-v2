@@ -38,8 +38,8 @@ class App {
     // Grabbing the camera takes control back from the auto-play tour
     this.orbitController.onUserInteract = () => this.hud.pauseTourOnInteract();
 
-    // Auto-play the built-in tour on launch (after the first shader compile/frame)
-    setTimeout(() => this.hud.autoStartTour(), 900);
+    // Auto-play in autonomous Random Mode on launch (starts on a random formula with procedural flythrough)
+    setTimeout(() => this.hud.autoStartRandom(), 900);
 
     // Pre-compile every other formula's shader in the background so formula switches never hitch
     this.hud.onWarmFormula = (f) => this.raymarcher.warm(f);

@@ -42,10 +42,12 @@ export class HUD {
   public onApplyKeyframeCamera?: (camera: CameraSnapshot) => void;
 
   private formulaList: FormulaDefinition[] = FORMULA_CYCLE_ORDER.map(id => FORMULAS[id]).filter(Boolean);
+  private randomDeck: number[] = [];
 
   constructor() {
-    // Start on the first formula of the tour
-    this.activeFormulaIndex = Math.min(buildTourOrder(this.formulaList.length)[0], this.formulaList.length - 1);
+    // Shuffled random formula sequence by default
+    this.refillRandomDeck();
+    this.activeFormulaIndex = this.getNextRandomFormulaIndex();
 
     // Default to Desert Sandstone
     const initialPal = PALETTES[0];
@@ -567,23 +569,54 @@ export class HUD {
     this.refreshGlobalKeyframeTrack();
   }
 
+  /** Launches the studio directly into autonomous procedural random exploration */
+  public autoStartRandom() {
+    if (this.tourActive || this.keyframeEngine.isPlaying) return;
+    this.triggerProceduralFlythrough(false);
+  }
+
+  private refillRandomDeck() {
+    const total = this.formulaList.length;
+    const indices: number[] = [];
+    for (let i = 0; i < total; i++) {
+      indices.push(i);
+    }
+    // Fisher-Yates true random shuffle
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    if (indices[0] === this.activeFormulaIndex && indices.length > 1) {
+      [indices[0], indices[1]] = [indices[1], indices[0]];
+    }
+    this.randomDeck = indices;
+  }
+
+  public getNextRandomFormulaIndex(): number {
+    if (this.randomDeck.length === 0) {
+      this.refillRandomDeck();
+    }
+    return this.randomDeck.shift() ?? Math.floor(Math.random() * this.formulaList.length);
+  }
+
   /** Generates and launches an infinite, seamless procedural flythrough that weaves through interior gaps */
-  public triggerProceduralFlythrough() {
+  public triggerProceduralFlythrough(pickNew: boolean = false) {
     const btnDockRandom = document.getElementById('btn-dock-random');
     btnDockRandom?.classList.remove('rolling');
     void btnDockRandom?.offsetWidth;
     btnDockRandom?.classList.add('rolling');
     setTimeout(() => btnDockRandom?.classList.remove('rolling'), 700);
 
-    // If random mode is already running, tapping the dice immediately jumps to a new random formula!
-    if (this.isRandomMode && this.keyframeEngine.isPlaying) {
+    // If random mode is already running or pickNew requested, jump directly to a fresh random formula!
+    if (pickNew || (this.isRandomMode && this.keyframeEngine.isPlaying)) {
       this.advanceRandomFormula();
       return;
     }
 
     const f = this.getActiveFormula();
     const curParams = this.getDynamicParams();
-    const loop = ProceduralFlythrough.generateLoop(f, curParams, this.activePaletteIndex);
+    const randomPalIdx = Math.floor(Math.random() * PALETTES.length);
+    const loop = ProceduralFlythrough.generateLoop(f, curParams, randomPalIdx);
 
     // Stop tour if running
     this.tourActive = false;
@@ -598,8 +631,8 @@ export class HUD {
 
     // Install procedural track in keyframe engine
     this.keyframeEngine.replaceTrackForFormula(f.id, loop);
-    this.keyframeEngine.segmentDuration = 7.5; // Smooth, gradual, cinematic pacing
-    this.keyframeEngine.cycleAtLastKeyframe = false;
+    this.keyframeEngine.segmentDuration = 6.5; // Smooth, gradual, cinematic pacing
+    this.keyframeEngine.cycleAtLastKeyframe = true; // Auto-cycle to next random formula when complete!
     this.isRandomMode = true;
 
     // Smoothly transition into the first waypoint
@@ -616,27 +649,12 @@ export class HUD {
     }, glideDuration * 1000 + 40);
   }
 
-  private randomFormulaHistory: number[] = [];
-
   private advanceRandomFormula() {
     this.isRandomMode = true;
     this.keyframeEngine.stop();
 
-    const total = this.formulaList.length;
-    if (this.randomFormulaHistory.length >= total - 1) {
-      this.randomFormulaHistory = [this.activeFormulaIndex];
-    }
-    const candidates: number[] = [];
-    for (let i = 0; i < total; i++) {
-      if (i !== this.activeFormulaIndex && !this.randomFormulaHistory.includes(i)) {
-        candidates.push(i);
-      }
-    }
-    const nextIdx = candidates.length > 0
-      ? candidates[Math.floor(Math.random() * candidates.length)]
-      : (this.activeFormulaIndex + 1) % total;
-
-    this.randomFormulaHistory.push(nextIdx);
+    // Pull next formula from the true random shuffle deck
+    const nextIdx = this.getNextRandomFormulaIndex();
     const nextFormula = this.formulaList[nextIdx];
 
     this.onWarmFormula?.(nextFormula);
@@ -660,8 +678,8 @@ export class HUD {
     const loop = ProceduralFlythrough.generateLoop(f, curParams, randomPalIdx);
 
     this.keyframeEngine.replaceTrackForFormula(f.id, loop);
-    this.keyframeEngine.segmentDuration = 7.5;
-    this.keyframeEngine.cycleAtLastKeyframe = false;
+    this.keyframeEngine.segmentDuration = 6.5;
+    this.keyframeEngine.cycleAtLastKeyframe = true; // Auto-cycle to next random formula!
 
     const firstFrame = loop[0];
     const duration = 2.0;
@@ -678,15 +696,8 @@ export class HUD {
   }
 
   private warmNextRandomFormula() {
-    const total = this.formulaList.length;
-    const candidates: number[] = [];
-    for (let i = 0; i < total; i++) {
-      if (i !== this.activeFormulaIndex && !this.randomFormulaHistory.includes(i)) {
-        candidates.push(i);
-      }
-    }
-    if (candidates.length > 0) {
-      this.onWarmFormula?.(this.formulaList[candidates[0]]);
+    if (this.randomDeck.length > 0) {
+      this.onWarmFormula?.(this.formulaList[this.randomDeck[0]]);
     }
   }
 
