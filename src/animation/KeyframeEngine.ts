@@ -288,73 +288,38 @@ export class KeyframeEngine {
         orbitRadius: cam0.orbitRadius
       };
     } else if (n === 2) {
-      // 2-keyframe loop: Silky cosine SLERP geodesic arc around target with zero wobble
+      // 2-keyframe loop: Direct continuous hermite on position and target
       const easeT = t * t * (3.0 - 2.0 * t);
       const kfA = kf1;
       const kfB = kf2;
+
+      const posX = kfA.camera.pos[0] + (kfB.camera.pos[0] - kfA.camera.pos[0]) * easeT;
+      const posY = kfA.camera.pos[1] + (kfB.camera.pos[1] - kfA.camera.pos[1]) * easeT;
+      const posZ = kfA.camera.pos[2] + (kfB.camera.pos[2] - kfA.camera.pos[2]) * easeT;
 
       const targetX = kfA.camera.target[0] + (kfB.camera.target[0] - kfA.camera.target[0]) * easeT;
       const targetY = kfA.camera.target[1] + (kfB.camera.target[1] - kfA.camera.target[1]) * easeT;
       const targetZ = kfA.camera.target[2] + (kfB.camera.target[2] - kfA.camera.target[2]) * easeT;
 
-      const radius = kfA.camera.orbitRadius + (kfB.camera.orbitRadius - kfA.camera.orbitRadius) * easeT;
-
-      const dA: [number, number, number] = [
-        kfA.camera.pos[0] - kfA.camera.target[0],
-        kfA.camera.pos[1] - kfA.camera.target[1],
-        kfA.camera.pos[2] - kfA.camera.target[2]
-      ];
-      const dB: [number, number, number] = [
-        kfB.camera.pos[0] - kfB.camera.target[0],
-        kfB.camera.pos[1] - kfB.camera.target[1],
-        kfB.camera.pos[2] - kfB.camera.target[2]
-      ];
-      const lA = Math.hypot(...dA) || 1.0;
-      const lB = Math.hypot(...dB) || 1.0;
-      const uA: [number, number, number] = [dA[0] / lA, dA[1] / lA, dA[2] / lA];
-      const uB: [number, number, number] = [dB[0] / lB, dB[1] / lB, dB[2] / lB];
-
-      const curDir = slerpVec3(uA, uB, easeT);
       const curUp = slerpVec3(kfA.camera.up, kfB.camera.up, easeT);
 
       interpolatedCamera = {
-        pos: [
-          targetX + curDir[0] * radius,
-          targetY + curDir[1] * radius,
-          targetZ + curDir[2] * radius
-        ],
+        pos: [posX, posY, posZ],
         target: [targetX, targetY, targetZ],
         up: curUp,
-        orbitRadius: radius
+        orbitRadius: Math.hypot(posX - targetX, posY - targetY, posZ - targetZ)
       };
     } else {
       // 3+ keyframes: Continuous Catmull-Rom spline with continuous velocity
-      const rad0 = kf0.camera.orbitRadius;
-      const rad1 = kf1.camera.orbitRadius;
-      const rad2 = kf2.camera.orbitRadius;
-      const rad3 = kf3.camera.orbitRadius;
-      const radius = catmullRom(rad0, rad1, rad2, rad3, t);
+      // Direct 3D Euclidean Catmull-Rom on camera pos (zero jump, zero spherical distortion)
+      const posX = catmullRom(kf0.camera.pos[0], kf1.camera.pos[0], kf2.camera.pos[0], kf3.camera.pos[0], t);
+      const posY = catmullRom(kf0.camera.pos[1], kf1.camera.pos[1], kf2.camera.pos[1], kf3.camera.pos[1], t);
+      const posZ = catmullRom(kf0.camera.pos[2], kf1.camera.pos[2], kf2.camera.pos[2], kf3.camera.pos[2], t);
 
       // Interpolate target center smoothly with cubic Hermite
       const targetX = catmullRom(kf0.camera.target[0], kf1.camera.target[0], kf2.camera.target[0], kf3.camera.target[0], t);
       const targetY = catmullRom(kf0.camera.target[1], kf1.camera.target[1], kf2.camera.target[1], kf3.camera.target[1], t);
       const targetZ = catmullRom(kf0.camera.target[2], kf1.camera.target[2], kf2.camera.target[2], kf3.camera.target[2], t);
-
-      // Unit direction vectors from target to position
-      const d0 = [kf0.camera.pos[0] - kf0.camera.target[0], kf0.camera.pos[1] - kf0.camera.target[1], kf0.camera.pos[2] - kf0.camera.target[2]];
-      const d1 = [kf1.camera.pos[0] - kf1.camera.target[0], kf1.camera.pos[1] - kf1.camera.target[1], kf1.camera.pos[2] - kf1.camera.target[2]];
-      const d2 = [kf2.camera.pos[0] - kf2.camera.target[0], kf2.camera.pos[1] - kf2.camera.target[1], kf2.camera.pos[2] - kf2.camera.target[2]];
-      const d3 = [kf3.camera.pos[0] - kf3.camera.target[0], kf3.camera.pos[1] - kf3.camera.target[1], kf3.camera.pos[2] - kf3.camera.target[2]];
-
-      const l0 = Math.hypot(...d0) || 1.0;
-      const l1 = Math.hypot(...d1) || 1.0;
-      const l2 = Math.hypot(...d2) || 1.0;
-      const l3 = Math.hypot(...d3) || 1.0;
-
-      const dirX = catmullRom(d0[0] / l0, d1[0] / l1, d2[0] / l2, d3[0] / l3, t);
-      const dirY = catmullRom(d0[1] / l0, d1[1] / l1, d2[1] / l2, d3[1] / l3, t);
-      const dirZ = catmullRom(d0[2] / l0, d1[2] / l1, d2[2] / l2, d3[2] / l3, t);
-      const dirLen = Math.hypot(dirX, dirY, dirZ) || 1.0;
 
       const upX = catmullRom(kf0.camera.up[0], kf1.camera.up[0], kf2.camera.up[0], kf3.camera.up[0], t);
       const upY = catmullRom(kf0.camera.up[1], kf1.camera.up[1], kf2.camera.up[1], kf3.camera.up[1], t);
@@ -362,14 +327,10 @@ export class KeyframeEngine {
       const upLen = Math.hypot(upX, upY, upZ) || 1.0;
 
       interpolatedCamera = {
-        pos: [
-          targetX + (dirX / dirLen) * radius,
-          targetY + (dirY / dirLen) * radius,
-          targetZ + (dirZ / dirLen) * radius
-        ],
+        pos: [posX, posY, posZ],
         target: [targetX, targetY, targetZ],
         up: [upX / upLen, upY / upLen, upZ / upLen],
-        orbitRadius: radius
+        orbitRadius: Math.hypot(posX - targetX, posY - targetY, posZ - targetZ)
       };
     }
 

@@ -138,7 +138,7 @@ export class ProceduralFlythrough {
         pos: [px, py, pz],
         target: [targetX, targetY, targetZ],
         up: [up[0] / upLen, up[1] / upLen, up[2] / upLen],
-        orbitRadius: lookDist
+        orbitRadius: Math.hypot(px - targetX, py - targetY, pz - targetZ)
       };
 
       // Calculate camera forward direction in horizontal plane for Chiaroscuro sun tracking

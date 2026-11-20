@@ -682,15 +682,13 @@ export class HUD {
     // Smoothly transition into the first waypoint aligned with segmentDuration
     const firstFrame = loop[0];
     const glideDuration = this.keyframeEngine.segmentDuration;
-    this.transitionToGlobalKeyframe(firstFrame, glideDuration);
-    this.refreshGlobalKeyframeTrack();
-
-    setTimeout(() => {
+    this.transitionToGlobalKeyframe(firstFrame, glideDuration, () => {
       if (!this.isRandomMode) return;
       this.keyframeEngine.play(f.id);
       this.warmNextRandomFormula();
       this.refreshGlobalKeyframeTrack();
-    }, glideDuration * 1000 + 40);
+    });
+    this.refreshGlobalKeyframeTrack();
   }
 
   private advanceRandomFormula() {
@@ -728,16 +726,13 @@ export class HUD {
     const firstFrame = loop[0];
     // Keep formula-to-formula transitions aligned with in-formula motions (6.5s) for seamless, smooth pacing
     const duration = this.keyframeEngine.segmentDuration;
-    this.transitionToGlobalKeyframe(firstFrame, duration);
-    this.refreshGlobalKeyframeTrack();
-
-    this.tourTimer = window.setTimeout(() => {
-      this.tourTimer = null;
+    this.transitionToGlobalKeyframe(firstFrame, duration, () => {
       if (!this.isRandomMode) return;
       this.keyframeEngine.play(f.id);
       this.warmNextRandomFormula();
       this.refreshGlobalKeyframeTrack();
-    }, duration * 1000 + 60);
+    });
+    this.refreshGlobalKeyframeTrack();
   }
 
   private warmNextRandomFormula() {
@@ -788,16 +783,14 @@ export class HUD {
     this.selectFormula(next, true);
     const first = this.keyframeEngine.getFramesFor(this.formulaList[next].id)[0];
     const duration = this.keyframeEngine.segmentDuration;
-    this.transitionToGlobalKeyframe(first, duration);
-    this.refreshGlobalKeyframeTrack();
-    this.tourTimer = window.setTimeout(() => {
-      this.tourTimer = null;
+    this.transitionToGlobalKeyframe(first, duration, () => {
       if (!this.tourActive) return;
       this.keyframeEngine.segmentDuration = this.tourSegmentDuration(this.getActiveFormula().id);
       this.keyframeEngine.play(this.getActiveFormula().id);
       this.warmNextTourFormula();
       this.refreshGlobalKeyframeTrack();
-    }, duration * 1000 + 60);
+    });
+    this.refreshGlobalKeyframeTrack();
   }
 
   public refreshGlobalKeyframeTrack() {
@@ -1385,7 +1378,8 @@ export class HUD {
 
   public transitionToGlobalKeyframe(
     targetKf: Keyframe,
-    durationSec: number = 0.75
+    durationSec: number = 0.75,
+    onComplete?: () => void
   ) {
     if (this.activeTween !== null) {
       cancelAnimationFrame(this.activeTween);
@@ -1500,6 +1494,7 @@ export class HUD {
         const select = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
         if (select) select.value = String(targetKf.paletteIndex);
         this.updatePopoverActiveStates();
+        onComplete?.();
       }
     };
 
