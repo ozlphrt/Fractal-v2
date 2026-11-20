@@ -19,6 +19,7 @@ export interface FormulaDefinition {
     pos: [number, number, number];
     target: [number, number, number];
   };
+  boundRadius?: number;
   params: FormulaParam[];
   glslDE: string;
   cpuDE: (pos: [number, number, number], params: Record<string, number>) => number;
@@ -51,6 +52,7 @@ export interface RenderSettings {
   rimIntensity: number;
   rimElevation: number;
   fillIntensity: number;
+  glowIntensity: number;
   headlamp: boolean;
   headlampIntensity: number;
   fogDensity: number;

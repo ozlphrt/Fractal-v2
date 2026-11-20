@@ -1,5 +1,5 @@
 // src/renderer/shaders/raymarch.glsl.ts
-// Primary raymarching shader with natural geological materials, soft shadows, and clean lighting
+// Optimized raymarching engine with bounding sphere early-out, cool dark blue rim, and volumetric glow
 
 import { COMMON_GLSL } from './common.glsl.ts';
 import { FormulaDefinition } from '../../core/types.ts';
@@ -42,15 +42,18 @@ uniform float u_dispersion;
 uniform float u_subsurface;
 uniform float u_emissiveVeins;
 
-// Volumetrics & Lighting
+// 3-Point Studio Lighting & Atmosphere
 uniform vec3 u_lightDir;
 uniform float u_sunIntensity;
 uniform float u_rimIntensity;
 uniform float u_rimElevation;
 uniform float u_fillIntensity;
+uniform float u_glowIntensity;
 uniform float u_headlampIntensity;
 uniform float u_fogDensity;
 uniform float u_godraysIntensity;
+uniform float u_boundRadius;
+uniform int u_maxSteps;
 
 // Natural Geological Cosine Palette
 uniform vec3 u_palA;
@@ -66,6 +69,16 @@ ${COMMON_GLSL}
 // Injected formula distance estimator
 ${formula.glslDE}
 
+// Bounding Sphere intersection test: skips empty space
+vec2 intersectSphere(vec3 ro, vec3 rd, float radius) {
+    float b = dot(ro, rd);
+    float c = dot(ro, ro) - radius * radius;
+    float h = b * b - c;
+    if (h < 0.0) return vec2(-1.0);
+    float sh = sqrt(h);
+    return vec2(-b - sh, -b + sh);
+}
+
 // Macroscopic 4-tap Tetrahedron Normal (Analytic gradient, zero micro-grit flickering)
 vec3 calcNormal(vec3 p, float eps) {
     const vec2 k = vec2(1.0, -1.0);
@@ -78,13 +91,13 @@ vec3 calcNormal(vec3 p, float eps) {
     );
 }
 
-// Continuous soft shadow with geometric penumbra
+// Continuous soft shadow with geometric penumbra & early exit
 float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     float res = 1.0;
     float ph = 1e10;
     float t = mint;
     vec4 trap;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 16; i++) {
         if (t >= maxt) break;
         float h = mapFractal(ro + rd * t, trap);
         if (h < 0.0005) return 0.0;
@@ -92,8 +105,8 @@ float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
         float d = sqrt(max(0.0, h * h - y * y));
         res = min(res, k * d / max(0.0, t - y));
         ph = h;
-        if (res < 0.02) return 0.0;
-        t += clamp(h * 0.85, 0.02, 0.3);
+        if (res < 0.02) return 0.0; // Early exit when already in deep shadow
+        t += clamp(h * 0.85, 0.02, 0.35);
     }
     return clamp(res, 0.0, 1.0);
 }
@@ -131,9 +144,10 @@ void main() {
     vec3 rayOrigin = u_camPos + cu * lensOffset.x + cv * lensOffset.y;
     vec3 rayDir = normalize(focalPoint - rayOrigin);
 
-    // Primary raymarch traversal
-    float t = 0.05;
-    float maxDist = 14.0;
+    // Primary raymarch traversal (no artificial bounding sphere clipping to prevent corner cut-offs)
+    float t = 0.02;
+    float maxDist = 18.0;
+
     vec4 trap = vec4(100.0);
     vec4 finalTrap = vec4(0.0);
     bool hit = false;
@@ -141,25 +155,26 @@ void main() {
     float glow = 0.0;
     float godrays = 0.0;
 
-    for (int i = 0; i < 260; i++) {
-        if (t > maxDist) break;
+    int maxIters = u_maxSteps > 0 ? u_maxSteps : 180;
+    for (int i = 0; i < 350; i++) {
+        if (i >= maxIters || t > maxDist) break;
         vec3 currPos = rayOrigin + rayDir * t;
         float d = mapFractal(currPos, trap);
 
-        // Bounded volumetric glow
-        if (d < 0.25) {
-            float g = max(0.0, 1.0 - d * 4.0);
-            glow += g * g * 0.0006;
+        // Calibrated volumetric step glow
+        if (u_glowIntensity > 0.001 && d < 0.35) {
+            float g = max(0.0, 1.0 - d * 2.8);
+            glow += g * g * 0.012 * u_glowIntensity;
         }
 
-        // Soft volumetric god rays
+        // Soft atmospheric god rays
         if (u_godraysIntensity > 0.01) {
             float lightAlign = dot(rayDir, u_lightDir);
             float phase = henyeyGreenstein(lightAlign, 0.65);
-            godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.0004 * u_godraysIntensity;
+            godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.0006 * u_godraysIntensity;
         }
 
-        float hitThresh = 0.0012 * (1.0 + t * 0.015);
+        float hitThresh = 0.0011 * (1.0 + t * 0.015);
         if (d < hitThresh) {
             t += d * 0.5;
             hit = true;
@@ -167,19 +182,18 @@ void main() {
             finalTrap = trap;
             break;
         }
-        // Conservative 0.68x ray stepping to eliminate grazing lattice overshoots
-        t += max(hitThresh * 0.35, d * 0.68);
+        t += max(hitThresh * 0.35, d * 0.72);
     }
 
     vec3 sceneColor = vec3(0.0);
 
     if (hit) {
-        // Macroscopic curvature normal: filters out chaotic sub-pixel micro-grit
+        // Macroscopic curvature normal
         float normEps = max(0.0028, t * 0.0012);
         vec3 nor = calcNormal(hitPos, normEps);
         vec3 viewDir = -rayDir;
         
-        // Natural Geological Surface Coloring (stratified mineral layers from radial trap)
+        // Natural Geological Surface Coloring
         float trapVal = finalTrap.x;
         float tCoord = trapVal * 0.45;
         vec3 albedo = clamp(cosinePalette(tCoord, u_palA, u_palB, u_palC, u_palD), 0.0, 1.0);
@@ -196,41 +210,43 @@ void main() {
         // Natural rock crevice weathering
         albedo = mix(albedo * 0.65, albedo, smoothstep(0.1, 0.9, ao));
 
-        // Subtle mineral specular reflection
+        // 1. Primary Sun Light
         vec3 sunColor = vec3(1.0, 0.94, 0.85);
-        vec3 ambientFill = vec3(0.14, 0.16, 0.20) * (0.5 + 0.5 * nor.y);
-
-        // 1. Primary Key Light (Sun)
         vec3 directLight = diff * shadow * sunColor * 0.95 * u_sunIntensity;
         vec3 specularLight = spec * shadow * sunColor * 0.22 * u_sunIntensity;
-        vec3 ambientLight = ambientFill * ao * 0.6;
 
-        // 2. Secondary Fill / Bounce Light (soft complementary light)
-        vec3 fillDir = normalize(vec3(-u_lightDir.z, 0.35, u_lightDir.x));
+        // 2. Secondary Fill / Bounce Light (soft cool ambient bounce so shadows reveal geological detail)
+        vec3 fillDir = normalize(vec3(-u_lightDir.z, -0.3, u_lightDir.x));
         float fillDiff = clamp(dot(nor, fillDir), 0.0, 1.0);
-        vec3 fillLight = fillDiff * u_fillIntensity * vec3(0.85, 0.90, 0.95);
+        vec3 fillLight = fillDiff * u_fillIntensity * vec3(0.55, 0.62, 0.72) * 0.75;
 
-        // 3. Rim / Backlight (opposing edge light to illuminate silhouettes)
+        // 3. Subtle Cool Dark Midnight Blue Rim / Backlight (Cinematic edge separation)
+        vec3 coolDarkBlue = vec3(0.04, 0.16, 0.52);
         float rimRad = radians(u_rimElevation);
         vec3 rimDir = normalize(vec3(-u_lightDir.x, sin(rimRad), -u_lightDir.z));
         float rimDiff = clamp(dot(nor, rimDir), 0.0, 1.0);
-        float rimFresnel = pow(clamp(1.0 + dot(nor, rayDir), 0.0, 1.0), 3.0);
-        vec3 rimLight = (rimDiff * 0.45 + rimFresnel * 0.55) * u_rimIntensity * vec3(0.70, 0.82, 1.0);
+        float rimFresnel = pow(clamp(1.0 + dot(nor, rayDir), 0.0, 1.0), 4.2);
+        vec3 rimLight = (rimDiff * 0.25 + rimFresnel * 0.75) * u_rimIntensity * coolDarkBlue;
 
-        // 4. Camera-Tracking Flashlight / Headlamp (used in 6DOF Flight Mode)
+        // 4. Camera-Tracking Flashlight / Headlamp (6DOF Flight Mode ONLY)
         vec3 headlampLight = vec3(0.0);
         if (u_headlampIntensity > 0.01) {
             vec3 toLight = u_camPos - hitPos;
             float lDist = length(toLight);
             vec3 lDir = toLight / max(lDist, 1e-4);
-            float spotAlign = dot(-lDir, cw); // cw is camera forward
+            float spotAlign = dot(-lDir, cw);
             float spotCone = smoothstep(0.68, 0.92, spotAlign);
             float spotAtten = 1.0 / (1.0 + 0.35 * lDist + 0.15 * lDist * lDist);
             float spotDiff = max(dot(nor, lDir), 0.0);
             headlampLight = spotDiff * spotCone * spotAtten * u_headlampIntensity * vec3(1.0, 0.97, 0.92);
         }
 
-        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * albedo + specularLight + rimLight * albedo;
+        // Ambient environmental fill
+        vec3 ambientFill = vec3(0.12, 0.14, 0.18) * (0.5 + 0.5 * nor.y);
+        vec3 ambientLight = ambientFill * ao * 0.5;
+
+        // Assemble total surface illumination
+        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * albedo + specularLight + rimLight;
 
         // Subtle optional emissive veins
         if (u_emissiveVeins > 0.01) {
@@ -240,20 +256,21 @@ void main() {
 
         // Distance fog
         float fogFactor = 1.0 - exp(-t * u_fogDensity);
-        vec3 fogColor = vec3(0.03, 0.04, 0.06);
+        vec3 fogColor = vec3(0.02, 0.03, 0.05);
         sceneColor = mix(sceneColor, fogColor, fogFactor);
 
     } else {
         // Deep natural midnight sky with subtle warm sun glow
         float sunGlow = pow(max(dot(rayDir, u_lightDir), 0.0), 16.0);
-        vec3 skyTop = vec3(0.015, 0.02, 0.035);
-        vec3 skyBottom = vec3(0.005, 0.008, 0.014);
+        vec3 skyTop = vec3(0.012, 0.016, 0.028);
+        vec3 skyBottom = vec3(0.004, 0.006, 0.010);
         vec3 skyBg = mix(skyBottom, skyTop, clamp(rayDir.y * 0.5 + 0.5, 0.0, 1.0));
         sceneColor = skyBg + vec3(0.12, 0.10, 0.07) * sunGlow;
     }
 
-    // Soft bounded volumetric glow & atmospheric light shafts
-    sceneColor += glow * u_palA * 0.8;
+    // Additive volumetric glow (cool blue-tinted atmospheric mist)
+    vec3 glowTint = mix(u_palA * 0.7, vec3(0.1, 0.35, 0.9), 0.45);
+    sceneColor += glow * glowTint;
     sceneColor += godrays * vec3(0.9, 0.85, 0.7);
 
     fragColor = vec4(sceneColor, 1.0);

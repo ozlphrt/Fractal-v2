@@ -229,6 +229,7 @@ export class Raymarcher {
     set1f('u_rimIntensity', settings.rimIntensity);
     set1f('u_rimElevation', settings.rimElevation);
     set1f('u_fillIntensity', settings.fillIntensity);
+    set1f('u_glowIntensity', settings.glowIntensity ?? 0.35);
 
     // Camera-Tracking Headlamp (Active ONLY in 6DOF Flight mode)
     const headlampPower = (isFlightMode && settings.headlamp) ? settings.headlampIntensity : 0.0;

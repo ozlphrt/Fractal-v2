@@ -1,5 +1,5 @@
 // src/camera/OrbitController.ts
-// Smooth momentum turntable orbit controller with right-click panning and Q/E keyboard support
+// Heavy physical flywheel orbit controller with continuous 360° unconstrained rotation, viscous drag, and inertial glide
 
 import { Camera } from './Camera.ts';
 import { Vec3 } from '../core/math.ts';
@@ -13,12 +13,13 @@ export class OrbitController {
   private lastMouseX = 0;
   private lastMouseY = 0;
 
-  private radius = 2.5;
-  private theta = 0.0;
-  private phi = Math.PI * 0.45;
+  // Heavy moment of inertia: angular velocities and pan velocities
+  private velYaw = 0;
+  private velPitch = 0;
+  private panVelX = 0;
+  private panVelY = 0;
 
-  private targetTheta = 0.0;
-  private targetPhi = Math.PI * 0.45;
+  // Heavy inertial zoom glide
   private targetRadius = 2.5;
 
   public onChange?: () => void;
@@ -32,13 +33,60 @@ export class OrbitController {
   }
 
   public syncFromCamera() {
-    const dir = this.camera.position.clone().sub(this.camera.target);
-    this.radius = Math.max(0.2, dir.length());
-    this.targetRadius = this.radius;
-    this.phi = Math.acos(Math.max(-1, Math.min(1, dir.y / (this.radius || 1e-6))));
-    this.targetPhi = this.phi;
-    this.theta = Math.atan2(dir.x, dir.z);
-    this.targetTheta = this.theta;
+    const offset = this.camera.position.clone().sub(this.camera.target);
+    this.targetRadius = Math.max(0.04, offset.length());
+    this.velYaw = 0;
+    this.velPitch = 0;
+    this.panVelX = 0;
+    this.panVelY = 0;
+  }
+
+  /**
+   * Continuous 360° unconstrained rotation around camera right and up axes.
+   * Completely eliminates 180° pole walls, allowing infinite vertical & horizontal looping.
+   */
+  public rotateOrbit(dYaw: number, dPitch: number) {
+    const offset = this.camera.position.clone().sub(this.camera.target);
+    const radius = Math.max(0.02, offset.length());
+    const forward = offset.clone().normalize().scale(-1.0); // pointing towards target
+    
+    // Right vector is perpendicular to forward and camera up
+    const right = forward.clone().cross(this.camera.up).normalize();
+    if (right.lengthSq() < 1e-4) {
+      right.set(1, 0, 0);
+    }
+
+    // 1. Pitch: Vertical 360° rotation around camera right axis (no clamping, loops infinitely)
+    if (Math.abs(dPitch) > 1e-7) {
+      offset.applyAxisAngle(right, -dPitch);
+      this.camera.up.applyAxisAngle(right, -dPitch).normalize();
+    }
+
+    // 2. Yaw: Horizontal 360° rotation around camera up axis
+    if (Math.abs(dYaw) > 1e-7) {
+      offset.applyAxisAngle(this.camera.up, -dYaw);
+    }
+
+    // Preserve current zoom distance
+    offset.normalize().scale(radius);
+    this.camera.position.copy(this.camera.target).add(offset);
+    this.onChange?.();
+  }
+
+  private applyPan(dx: number, dy: number) {
+    const offset = this.camera.position.clone().sub(this.camera.target);
+    const forward = offset.clone().normalize().scale(-1.0);
+    const right = forward.clone().cross(this.camera.up).normalize();
+    const up = this.camera.up.clone().normalize();
+    const panFactor = Math.max(0.05, offset.length()) * 0.0012;
+
+    const panOffset = new Vec3()
+      .addScaled(right, -dx * panFactor)
+      .addScaled(up, dy * panFactor);
+
+    this.camera.target.add(panOffset);
+    this.camera.position.add(panOffset);
+    this.onChange?.();
   }
 
   private bindEvents() {
@@ -49,7 +97,6 @@ export class OrbitController {
 
     this.canvas.addEventListener('pointerdown', (e) => {
       this.isDragging = true;
-      // Button 2 is right click, button 1 is middle click, or shift + left click
       if (e.button === 2 || e.button === 1 || e.shiftKey) {
         this.dragMode = 'pan';
       } else {
@@ -71,64 +118,77 @@ export class OrbitController {
       this.lastMouseY = e.clientY;
 
       if (this.dragMode === 'pan') {
-        // Right-click Pan: move both target and position along camera right and up vectors
-        const right = this.camera.getRight();
-        const up = this.camera.up.clone().normalize();
-        const panFactor = this.radius * 0.0016;
-
-        const panOffset = new Vec3()
-          .addScaled(right, -dx * panFactor)
-          .addScaled(up, dy * panFactor);
-
-        this.camera.target.add(panOffset);
-        this.camera.position.add(panOffset);
-        this.onChange?.();
+        // Heavy smooth pan with inertia
+        this.applyPan(dx, dy);
+        this.panVelX = dx * 0.45;
+        this.panVelY = dy * 0.45;
       } else {
-        // Left-click Orbit: rotate around target
-        this.targetTheta -= dx * 0.006;
-        this.targetPhi = Math.max(0.01, Math.min(Math.PI - 0.01, this.targetPhi - dy * 0.006));
-        this.onChange?.();
+        // Physical flywheel drag: smoothly accumulates torque with mass resistance
+        const targetVelX = dx * 0.0035;
+        const targetVelY = dy * 0.0035;
+        
+        // Heavy mass resistance: lerp towards target velocity
+        this.velYaw += (targetVelX - this.velYaw) * 0.42;
+        this.velPitch += (targetVelY - this.velPitch) * 0.42;
+        
+        this.rotateOrbit(this.velYaw, this.velPitch);
       }
     });
 
+    // Heavy inertial wheel zoom (buttery smooth exponential glide with physical mass feeling)
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const zoomDelta = e.deltaY * 0.0015;
-      this.targetRadius = Math.max(0.05, Math.min(12.0, this.targetRadius * (1.0 + zoomDelta)));
+      const zoomDelta = e.deltaY * 0.0012;
+      this.targetRadius = Math.max(0.04, Math.min(30.0, this.targetRadius * (1.0 + zoomDelta)));
       this.onChange?.();
     }, { passive: false });
 
-    // Keyboard support in Orbit mode: Q and E to orbit left/right
+    // Keyboard support: Q and E to rotate horizontally with inertia
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
       if (key === 'q' || e.code === 'KeyQ') {
-        this.targetTheta += 0.08;
+        this.velYaw -= 0.025;
         this.onChange?.();
       } else if (key === 'e' || e.code === 'KeyE') {
-        this.targetTheta -= 0.08;
+        this.velYaw += 0.025;
         this.onChange?.();
       }
     });
   }
 
   public update(dt: number) {
-    const damping = Math.min(1.0, dt * 14.0);
-    this.theta += (this.targetTheta - this.theta) * damping;
-    this.phi += (this.targetPhi - this.phi) * damping;
-    this.radius += (this.targetRadius - this.radius) * damping;
+    let moved = false;
 
-    const x = this.radius * Math.sin(this.phi) * Math.sin(this.theta);
-    const y = this.radius * Math.cos(this.phi);
-    const z = this.radius * Math.sin(this.phi) * Math.cos(this.theta);
+    // Heavy viscous friction drag (preserves sustained weighty glide)
+    if (!this.isDragging && (Math.abs(this.velYaw) > 1e-5 || Math.abs(this.velPitch) > 1e-5)) {
+      this.rotateOrbit(this.velYaw, this.velPitch);
+      const friction = Math.pow(0.91, Math.min(3.0, dt * 60.0));
+      this.velYaw *= friction;
+      this.velPitch *= friction;
+      moved = true;
+    }
 
-    const oldPos = this.camera.position.clone();
-    this.camera.position.set(
-      this.camera.target.x + x,
-      this.camera.target.y + y,
-      this.camera.target.z + z
-    );
+    // Heavy pan momentum decay
+    if (!this.isDragging && (Math.abs(this.panVelX) > 1e-3 || Math.abs(this.panVelY) > 1e-3)) {
+      this.applyPan(this.panVelX, this.panVelY);
+      const panFriction = Math.pow(0.88, Math.min(3.0, dt * 60.0));
+      this.panVelX *= panFriction;
+      this.panVelY *= panFriction;
+      moved = true;
+    }
 
-    if (this.camera.position.distanceToSq(oldPos) > 1e-6) {
+    // Heavy inertial exponential zoom glide
+    const offset = this.camera.position.clone().sub(this.camera.target);
+    const currentRadius = offset.length();
+    if (Math.abs(currentRadius - this.targetRadius) > 1e-4) {
+      const zoomEase = Math.min(1.0, dt * 7.5);
+      const newRadius = currentRadius + (this.targetRadius - currentRadius) * zoomEase;
+      offset.normalize().scale(newRadius);
+      this.camera.position.copy(this.camera.target).add(offset);
+      moved = true;
+    }
+
+    if (moved) {
       this.onChange?.();
     }
   }

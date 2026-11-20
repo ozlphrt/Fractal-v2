@@ -141,6 +141,7 @@ for (const id of FORMULA_CYCLE_ORDER) {
       name: raw.name,
       subtitle: raw.subtitle || '',
       defaultCam: raw.defaultCam || { pos: [0, 0, 2.5], target: [0, 0, 0] },
+      boundRadius: raw.boundRadius ?? 4.5,
       params: raw.params || [],
       glslDE: raw.glsl,
       cpuDE: (pos: [number, number, number], params: Record<string, number>) => {

@@ -87,6 +87,21 @@ export class Vec3 {
   toArray(): [number, number, number] {
     return [this.x, this.y, this.z];
   }
+
+  applyAxisAngle(axis: Vec3, angle: number): this {
+    // Rodrigues' rotation formula
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    const dot = this.x * axis.x + this.y * axis.y + this.z * axis.z;
+    const cx = axis.y * this.z - axis.z * this.y;
+    const cy = axis.z * this.x - axis.x * this.z;
+    const cz = axis.x * this.y - axis.y * this.x;
+    const k = dot * (1.0 - cosA);
+    this.x = this.x * cosA + cx * sinA + axis.x * k;
+    this.y = this.y * cosA + cy * sinA + axis.y * k;
+    this.z = this.z * cosA + cz * sinA + axis.z * k;
+    return this;
+  }
 }
 
 export class Mat4 {
