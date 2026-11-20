@@ -82,8 +82,72 @@ float fbm3D(vec3 p) {
     return v;
 }
 
+// Passing comet simulation (coma nucleus, ion tail, dust tail)
+vec3 renderComet(vec3 dir, vec3 sunDir, float time, float period, float duration, float seedOffset) {
+    float t = time + seedOffset;
+    float cycle = mod(t, period);
+    if (cycle > duration) return vec3(0.0);
+
+    float progress = cycle / duration;
+    float cycleId = floor(t / period) + seedOffset;
+
+    // Pseudo-random start & end coordinates across celestial hemisphere
+    vec3 pStart = normalize(hash33(vec3(cycleId * 13.1, 7.31, 19.82)) - 0.5);
+    vec3 pEnd = normalize(hash33(vec3(cycleId * 17.7, 31.25, 5.14)) - 0.5);
+
+    // Ensure adequate celestial separation
+    if (dot(pStart, pEnd) > 0.85) {
+        pEnd = normalize(pEnd + vec3(0.4, -0.6, 0.5));
+    }
+
+    // Great circle trajectory
+    vec3 headPos = normalize(mix(pStart, pEnd, progress));
+    vec3 motionDir = normalize(pEnd - pStart);
+
+    // Tails:
+    // 1. Ion tail (pushed antisolar + behind motion)
+    vec3 ionTailDir = normalize(-motionDir * 0.65 - sunDir * 0.35);
+    // 2. Dust tail (trailing curved momentum)
+    vec3 dustTailDir = -motionDir;
+
+    vec3 toRay = dir - headPos;
+    float headDist = length(toRay);
+
+    // Fade-in / fade-out envelope
+    float envelope = smoothstep(0.0, 0.18, progress) * smoothstep(1.0, 0.78, progress);
+
+    // 1. Brilliant Nucleus & Glowing Coma
+    float core = smoothstep(0.0035, 0.0, headDist);
+    float coma = 0.00065 / (headDist * headDist + 0.00007);
+    vec3 nucleusColor = vec3(0.85, 1.15, 1.35) * (core * 2.8 + coma * 0.45);
+
+    // 2. Delicate Ion Tail (bluish, narrow, energetic)
+    float ionProj = dot(toRay, ionTailDir);
+    vec3 ionColor = vec3(0.0);
+    if (ionProj > 0.0) {
+        float ionOrtho = length(toRay - ionTailDir * ionProj);
+        float ionWidth = 0.0022 + ionProj * 0.045;
+        float ionFade = exp(-ionProj * 6.5) * smoothstep(0.55, 0.25, ionProj);
+        float ionProfile = exp(-ionOrtho * ionOrtho / (ionWidth * ionWidth * 2.0));
+        ionColor = vec3(0.35, 0.70, 1.1) * (ionFade * ionProfile * 1.6);
+    }
+
+    // 3. Diffuse Dust Tail (warm starlight reflection, slightly wider)
+    float dustProj = dot(toRay, dustTailDir);
+    vec3 dustColor = vec3(0.0);
+    if (dustProj > 0.0) {
+        float dustOrtho = length(toRay - dustTailDir * dustProj);
+        float dustWidth = 0.0035 + dustProj * 0.085;
+        float dustFade = exp(-dustProj * 5.0) * smoothstep(0.45, 0.20, dustProj);
+        float dustProfile = exp(-dustOrtho * dustOrtho / (dustWidth * dustWidth * 2.0));
+        dustColor = vec3(0.85, 0.80, 0.70) * (dustFade * dustProfile * 0.9);
+    }
+
+    return (nucleusColor + ionColor + dustColor) * envelope;
+}
+
 // Photorealistic celestial background: Realistic stars & Milky Way dust cloud
-vec3 renderSpaceBackground(vec3 dir, vec3 sunDir) {
+vec3 renderSpaceBackground(vec3 dir, vec3 sunDir, float time) {
     // 1. Deep cosmic gradient & solar corona glow
     float sunDot = max(dot(dir, sunDir), 0.0);
     float sunGlow = pow(sunDot, 20.0) * 0.16 + pow(sunDot, 2.0) * 0.02;
@@ -181,6 +245,11 @@ vec3 renderSpaceBackground(vec3 dir, vec3 sunDir) {
             }
         }
     }
+
+    // 4. Passing Comets (realistic sporadic celestial visitors every now and then)
+    vec3 cometA = renderComet(dir, sunDir, time, 24.0, 3.4, 5.0);
+    vec3 cometB = renderComet(dir, sunDir, time, 39.0, 4.2, 18.0);
+    spaceColor += cometA + cometB;
 
     return spaceColor;
 }

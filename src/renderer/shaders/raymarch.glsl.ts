@@ -262,12 +262,12 @@ void main() {
 
         // Distance fog smoothly dissolving into deep space background
         float fogFactor = 1.0 - exp(-t * u_fogDensity);
-        vec3 spaceBackdrop = renderSpaceBackground(rayDir, u_lightDir);
-        sceneColor = mix(sceneColor, spaceBackdrop * 0.55, fogFactor);
+        vec3 spaceBackdrop = renderSpaceBackground(rayDir, u_lightDir, u_time);
+        sceneColor = mix(sceneColor, spaceBackdrop * 0.45, fogFactor);
 
     } else {
-        // Photorealistic celestial background: Realistic stars & Milky Way dust cloud
-        sceneColor = renderSpaceBackground(rayDir, u_lightDir);
+        // Photorealistic celestial background: Realistic stars, Milky Way & Passing comets
+        sceneColor = renderSpaceBackground(rayDir, u_lightDir, u_time);
     }
 
     // Additive volumetric glow (cool blue-tinted atmospheric mist)
