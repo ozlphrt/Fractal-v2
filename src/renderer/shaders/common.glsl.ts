@@ -104,31 +104,29 @@ vec3 renderSpaceBackground(vec3 dir, vec3 sunDir) {
 
     if (diffuseBand > 0.005) {
         // Multi-scale volumetric gas clouds and dark absorption dust lanes (The Great Rift)
-        vec3 mwCoord = dir * 4.2;
+        vec3 mwCoord = dir * 3.8;
         float dustA = fbm3D(mwCoord);
-        float dustB = fbm3D(mwCoord * 2.2 + vec3(1.7, 4.3, 2.1));
+        float dustB = fbm3D(mwCoord * 2.0 + vec3(1.7, 4.3, 2.1));
         
-        float darkRift = smoothstep(0.36, 0.64, dustA);
-        float fineRift = smoothstep(0.38, 0.62, dustB);
-        float absorption = clamp(1.0 - (darkRift * 0.78 + fineRift * 0.35), 0.09, 1.0);
+        float darkRift = smoothstep(0.40, 0.60, dustA);
+        float absorption = clamp(1.0 - darkRift * 0.55, 0.25, 1.0);
 
-        // Core bulge concentration
+        // Core bulge concentration (gentle, authentic)
         float coreAlign = max(0.0, dot(dir, galCenter));
-        float coreBulge = pow(coreAlign, 4.2) * 2.5;
+        float coreBulge = pow(coreAlign, 4.0) * 1.5;
 
-        // Nebular color distribution:
-        // - Dense galactic core: Warm golden/amber stellar glow
-        // - Interstellar dust: Deep cyan/indigo starlight reflection
-        // - H-II Ionization: Subtle magenta/pink emission nebulosity
-        vec3 coreColor = vec3(1.0, 0.82, 0.58);
-        vec3 diskColor = vec3(0.36, 0.46, 0.76);
-        vec3 nebulaPink = vec3(0.85, 0.35, 0.52);
+        // Subtle, authentic astrophotography palette:
+        // Soft warm stellar core, faint cool dust reflections, delicate faint ionized hints
+        vec3 coreColor = vec3(0.48, 0.42, 0.34);
+        vec3 diskColor = vec3(0.20, 0.26, 0.38);
+        vec3 nebulaTint = vec3(0.30, 0.18, 0.25);
 
-        vec3 mwTint = mix(diskColor, coreColor, clamp(coreBulge * 0.65 + band * 0.35, 0.0, 1.0));
-        mwTint += nebulaPink * dustB * band * 0.35;
+        vec3 mwTint = mix(diskColor, coreColor, clamp(coreBulge * 0.5 + band * 0.3, 0.0, 1.0));
+        mwTint += nebulaTint * (dustB - 0.5) * 0.2;
 
-        float mwEmission = (band * 0.68 + diffuseBand * 0.26 + broadGlow * 0.06 + coreBulge * band * 1.4) * absorption;
-        spaceColor += mwTint * mwEmission * 0.45;
+        float mwEmission = (band * 0.52 + diffuseBand * 0.18 + coreBulge * band * 0.75) * absorption;
+        // Subtle, non-intrusive ethereal Milky Way glow
+        spaceColor += mwTint * mwEmission * 0.15;
     }
 
     // 3. Realistic Stars (Dense micro-star background + crisp prominent foreground stars)
