@@ -55,6 +55,13 @@ function tangent(before: number, after: number): number {
   return before * after > 0 ? (2 * before * after) / (before + after) : 0;
 }
 
+function unwrapAngleDeg(ref: number, target: number): number {
+  let diff = (target - ref) % 360;
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  return ref + diff;
+}
+
 // Monotone (Fritsch-Butland) cubic Hermite: C1-continuous across keyframes, no overshoot.
 // Used for slider/material scalar values.
 export function cubicHermite(p0: number, p1: number, p2: number, p3: number, t: number): number {
@@ -187,6 +194,12 @@ export class KeyframeEngine {
 
   public clearTrack(formulaId: string) {
     this.keyframes = this.keyframes.filter(k => k.formulaId !== formulaId);
+    this.saveToStorage();
+    this.onTrackChange?.();
+  }
+
+  public replaceTrackForFormula(formulaId: string, frames: Keyframe[]) {
+    this.keyframes = this.keyframes.filter(k => k.formulaId !== formulaId).concat(frames);
     this.saveToStorage();
     this.onTrackChange?.();
   }
@@ -399,11 +412,20 @@ export class KeyframeEngine {
     const allKeys = new Set(track.flatMap(k => Object.keys(k.values)));
 
     for (const key of allKeys) {
-      const v0 = kf0.values[key] ?? kf1.values[key] ?? 0;
-      const v1 = kf1.values[key] ?? v0;
-      const v2 = kf2.values[key] ?? v1;
-      const v3 = kf3.values[key] ?? v2;
-      interpolatedValues[key] = cubicHermite(v0, v1, v2, v3, t);
+      let v0 = kf0.values[key] ?? kf1.values[key] ?? 0;
+      let v1 = kf1.values[key] ?? v0;
+      let v2 = kf2.values[key] ?? v1;
+      let v3 = kf3.values[key] ?? v2;
+
+      if (key === 'lightAzimuth') {
+        v1 = unwrapAngleDeg(v0, v1);
+        v2 = unwrapAngleDeg(v1, v2);
+        v3 = unwrapAngleDeg(v2, v3);
+        const interp = cubicHermite(v0, v1, v2, v3, t);
+        interpolatedValues[key] = (interp % 360 + 360) % 360;
+      } else {
+        interpolatedValues[key] = cubicHermite(v0, v1, v2, v3, t);
+      }
     }
 
     this.onApplyState?.(interpolatedCamera, interpolatedValues, interpolatedPalette, activePalIdx);

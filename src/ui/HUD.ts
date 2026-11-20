@@ -5,6 +5,7 @@
 import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
 import { FORMULAS, FORMULA_CYCLE_ORDER, FORMULA_GROUPS, PALETTES } from '../formulas/registry.ts';
 import { CameraSnapshot, Keyframe, KeyframeEngine, slerpVec3 } from '../animation/KeyframeEngine.ts';
+import { ProceduralFlythrough } from '../animation/ProceduralFlythrough.ts';
 
 /** Formula numbers (as shown in the UI) the auto-play tour visits first; everything else follows in numeric order */
 const TOUR_PRIORITY = [3, 4, 15, 16, 17, 7, 8, 9];
@@ -23,6 +24,7 @@ export class HUD {
   public currentPalette: PalettePreset;
 
   public keyframeEngine: KeyframeEngine = new KeyframeEngine();
+  public isRandomMode: boolean = false;
   public selectedKeyframeId: string | null = null;
   public dynamicParamValues: Record<string, number> = {};
 
@@ -367,6 +369,12 @@ export class HUD {
       this.toggleStoredLoopForActiveFormula();
     });
 
+    // Random Procedural Flythrough Dice Button
+    const btnDockRandom = document.getElementById('btn-dock-random');
+    btnDockRandom?.addEventListener('click', () => {
+      this.triggerProceduralFlythrough();
+    });
+
     // Collapsible keyframe footer (starts collapsed on small screens to free up space)
     const kfFooter = document.getElementById('drawer-global-footer');
     const kfToggle = document.getElementById('btn-toggle-kf');
@@ -445,7 +453,11 @@ export class HUD {
     const nowBadge = document.getElementById('kf-now-badge');
     if (nowBadge) {
       const total = this.keyframeEngine.getFramesFor(f.id).length;
-      nowBadge.textContent = idx >= 0 ? `▶ #${idx + 1}/${total}` : '';
+      if (idx >= 0) {
+        nowBadge.textContent = this.isRandomMode ? `🎲 #${idx + 1}/${total}` : `▶ #${idx + 1}/${total}`;
+      } else {
+        nowBadge.textContent = '';
+      }
     }
     if (idx !== this.lastPlayingIndex) {
       this.lastPlayingIndex = idx;
@@ -455,8 +467,8 @@ export class HUD {
 
   public toggleStoredLoopForActiveFormula() {
     const f = this.getActiveFormula();
-    // Pressing play while the tour (or a loop) is running pauses everything
-    if (this.tourActive || (this.keyframeEngine.isPlaying && this.keyframeEngine.playingFormulaId === f.id)) {
+    // Pressing play while the tour, random mode, or a loop is running pauses everything
+    if (this.tourActive || this.isRandomMode || (this.keyframeEngine.isPlaying && this.keyframeEngine.playingFormulaId === f.id)) {
       this.stopTour();
       return;
     }
@@ -536,6 +548,7 @@ export class HUD {
 
   public stopTour() {
     this.tourActive = false;
+    this.isRandomMode = false;
     this.keyframeEngine.cycleAtLastKeyframe = false;
     this.keyframeEngine.segmentDuration = 4.5;
     if (this.tourTimer !== null) {
@@ -548,6 +561,48 @@ export class HUD {
     }
     this.keyframeEngine.stop();
     this.refreshGlobalKeyframeTrack();
+  }
+
+  /** Generates and launches an infinite, seamless procedural flythrough that weaves through interior gaps */
+  public triggerProceduralFlythrough() {
+    const btnDockRandom = document.getElementById('btn-dock-random');
+    btnDockRandom?.classList.remove('rolling');
+    void btnDockRandom?.offsetWidth;
+    btnDockRandom?.classList.add('rolling');
+    setTimeout(() => btnDockRandom?.classList.remove('rolling'), 700);
+
+    const f = this.getActiveFormula();
+    const curParams = this.getDynamicParams();
+    const loop = ProceduralFlythrough.generateLoop(f, curParams, this.activePaletteIndex);
+
+    // Stop tour if running
+    this.tourActive = false;
+    if (this.tourTimer !== null) {
+      clearTimeout(this.tourTimer);
+      this.tourTimer = null;
+    }
+    if (this.activeTween !== null) {
+      cancelAnimationFrame(this.activeTween);
+      this.activeTween = null;
+    }
+
+    // Install procedural track in keyframe engine
+    this.keyframeEngine.replaceTrackForFormula(f.id, loop);
+    this.keyframeEngine.segmentDuration = 7.5; // Smooth, gradual, cinematic pacing
+    this.keyframeEngine.cycleAtLastKeyframe = false;
+    this.isRandomMode = true;
+
+    // Smoothly transition into the first waypoint
+    const firstFrame = loop[0];
+    const glideDuration = 1.8;
+    this.transitionToGlobalKeyframe(firstFrame, glideDuration);
+    this.refreshGlobalKeyframeTrack();
+
+    setTimeout(() => {
+      if (!this.isRandomMode) return;
+      this.keyframeEngine.play(f.id);
+      this.refreshGlobalKeyframeTrack();
+    }, glideDuration * 1000 + 40);
   }
 
   private advanceTour() {
@@ -633,6 +688,17 @@ export class HUD {
         playIcon.style.display = isPlaying ? 'none' : 'block';
         pauseIcon.style.display = isPlaying ? 'block' : 'none';
       }
+    }
+
+    // Sync Dock Random (Dice) button
+    const btnDockRandom = document.getElementById('btn-dock-random') as HTMLButtonElement | null;
+    if (btnDockRandom) {
+      const isRandomActive = this.isRandomMode && isPlaying;
+      btnDockRandom.classList.toggle('active', isRandomActive);
+      btnDockRandom.setAttribute('aria-pressed', String(isRandomActive));
+      btnDockRandom.title = isRandomActive
+        ? 'Procedural Flythrough Running (Click to re-roll new path)'
+        : 'Random Procedural Flythrough (Roll Dice)';
     }
 
     const updateBtn = document.getElementById('btn-update-global') as HTMLButtonElement | null;

@@ -290,6 +290,30 @@ html, body, #app {
   transform: rotate(90deg);
 }
 
+.dice-icon {
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  display: block;
+}
+
+.action-icon-btn:hover .dice-icon {
+  transform: rotate(18deg) scale(1.08);
+}
+
+.action-icon-btn.active .dice-icon,
+#btn-dock-random[aria-pressed="true"] .dice-icon {
+  color: var(--accent-steel);
+}
+
+.action-icon-btn.rolling .dice-icon {
+  animation: diceRoll 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes diceRoll {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(220deg) scale(1.25); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
 /* -------------------------------------------------------------
    Interactive Popovers (Formula & Material Quick Select)
    ------------------------------------------------------------- */
