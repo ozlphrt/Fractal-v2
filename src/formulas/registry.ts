@@ -92,7 +92,7 @@ export const FORMULA_GROUPS: FormulaGroup[] = [
   {
     name: 'Spherical & Bulbs',
     badge: 'SPH',
-    ids: ['mandelbulb', 'juliabulb', 'helix_bulb']
+    ids: ['mandelbulb', 'juliabulb']
   },
   {
     name: 'Kleinian & Gothic Architecture',
@@ -120,9 +120,9 @@ export const FORMULA_GROUPS: FormulaGroup[] = [
     ids: ['apollonian', 'pearl_gasket', 'lace_gasket']
   },
   {
-    name: 'Non-Analytic Abs Folds',
+    name: 'Non-Analytic & Helical Folds',
     badge: 'ABS',
-    ids: ['burning_ship', 'wind_ship']
+    ids: ['burning_ship', 'wind_ship', 'helix_bulb']
   }
 ];
 
