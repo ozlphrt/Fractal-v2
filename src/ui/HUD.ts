@@ -261,6 +261,33 @@ export class HUD {
       });
     }
 
+    // Populate Formula dropdown in Parameters tab
+    const formulaDropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement | null;
+    if (formulaDropdown) {
+      formulaDropdown.innerHTML = '';
+      for (const group of FORMULA_GROUPS) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group.name;
+        for (const id of group.ids) {
+          const f = FORMULAS[id];
+          if (!f) continue;
+          const idx = this.formulaList.findIndex(item => item.id === id);
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = `${idx + 1}. ${f.name}`;
+          optgroup.appendChild(opt);
+        }
+        formulaDropdown.appendChild(optgroup);
+      }
+      formulaDropdown.value = this.getActiveFormula().id;
+      formulaDropdown.addEventListener('change', () => {
+        const idx = this.formulaList.findIndex(item => item.id === formulaDropdown.value);
+        if (idx >= 0) {
+          this.selectFormula(idx);
+        }
+      });
+    }
+
     // 3-Point Lighting & Atmosphere sliders
     this.bindRange('param-sun-intensity', 'val-sun-intensity', val => this.settings.sunIntensity = val);
     this.bindRange('param-rim-intensity', 'val-rim-intensity', val => this.settings.rimIntensity = val);
@@ -1405,41 +1432,25 @@ export class HUD {
       // Silky cosine ease for zero initial and final velocity without sluggishness
       const t = 0.5 * (1.0 - Math.cos(Math.PI * rawT));
 
-      // 1. Camera geodesic arc interpolation around target (no cutting through center)
+      // 1. Direct 3D Euclidean camera interpolation: straight, silky glide from start to target pose
+      // Eliminates orbital swings and lateral jumps at the onset of transitions
+      const curPos: [number, number, number] = [
+        startCam.pos[0] + (targetCam.pos[0] - startCam.pos[0]) * t,
+        startCam.pos[1] + (targetCam.pos[1] - startCam.pos[1]) * t,
+        startCam.pos[2] + (targetCam.pos[2] - startCam.pos[2]) * t
+      ];
       const curTarget: [number, number, number] = [
         startCam.target[0] + (targetCam.target[0] - startCam.target[0]) * t,
         startCam.target[1] + (targetCam.target[1] - startCam.target[1]) * t,
         startCam.target[2] + (targetCam.target[2] - startCam.target[2]) * t
       ];
-
-      const sDir: [number, number, number] = [
-        startCam.pos[0] - startCam.target[0],
-        startCam.pos[1] - startCam.target[1],
-        startCam.pos[2] - startCam.target[2]
-      ];
-      const tDir: [number, number, number] = [
-        targetCam.pos[0] - targetCam.target[0],
-        targetCam.pos[1] - targetCam.target[1],
-        targetCam.pos[2] - targetCam.target[2]
-      ];
-      const sLen = Math.hypot(...sDir) || 1.0;
-      const tLen = Math.hypot(...tDir) || 1.0;
-      const u1: [number, number, number] = [sDir[0] / sLen, sDir[1] / sLen, sDir[2] / sLen];
-      const u2: [number, number, number] = [tDir[0] / tLen, tDir[1] / tLen, tDir[2] / tLen];
-
-      const curDir = slerpVec3(u1, u2, t);
-      const curRadius = sLen + (tLen - sLen) * t;
       const curUp = slerpVec3(startCam.up, targetCam.up, t);
 
       const curCam: CameraSnapshot = {
-        pos: [
-          curTarget[0] + curDir[0] * curRadius,
-          curTarget[1] + curDir[1] * curRadius,
-          curTarget[2] + curDir[2] * curRadius
-        ],
+        pos: curPos,
         target: curTarget,
         up: curUp,
-        orbitRadius: curRadius
+        orbitRadius: Math.hypot(curPos[0] - curTarget[0], curPos[1] - curTarget[1], curPos[2] - curTarget[2])
       };
       this.onApplyKeyframeCamera?.(curCam);
 

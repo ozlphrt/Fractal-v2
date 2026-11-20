@@ -69,6 +69,7 @@ export class OrbitController {
   }
 
   public syncFromCamera() {
+    this.activeCamTween = null;
     this.orbitRadius = Math.max(0.04, this.camera.position.length());
     this.targetOrbitRadius = this.orbitRadius;
     this.angularVelYaw = 0;

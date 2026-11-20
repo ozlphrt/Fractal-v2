@@ -256,12 +256,13 @@ export class Raymarcher {
       }
     }
 
+    const transitionSteps = this.prevFormula ? 120 : 135;
     if (this.prevFormula && this.prevProgram && this.transitionFBO) {
       this.drawScene(this.transitionFBO, this.prevProgram, this.prevFormula, this.prevParams, palette, settings,
-        camPos, camTarget, camUp, time, isFlightMode, screenOffset, 75);
+        camPos, camTarget, camUp, time, isFlightMode, screenOffset, transitionSteps);
     }
     this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
-      camPos, camTarget, camUp, time, isFlightMode, screenOffset, 135);
+      camPos, camTarget, camUp, time, isFlightMode, screenOffset, transitionSteps);
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;
