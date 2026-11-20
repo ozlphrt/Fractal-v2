@@ -17,14 +17,6 @@ export const PALETTES: PalettePreset[] = [
     d: [0.00, 0.10, 0.20]
   },
   {
-    id: 'forest_moss',
-    name: 'Forest Moss & Cedar',
-    a: [0.26, 0.32, 0.20],
-    b: [0.14, 0.16, 0.10],
-    c: [1.00, 1.20, 1.00],
-    d: [0.10, 0.25, 0.40]
-  },
-  {
     id: 'dark_loam',
     name: 'Dark Loam & Soil',
     a: [0.24, 0.18, 0.13],

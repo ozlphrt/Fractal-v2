@@ -260,18 +260,14 @@ void main() {
             sceneColor += albedo * vein * u_emissiveVeins * 0.3;
         }
 
-        // Distance fog
+        // Distance fog smoothly dissolving into deep space background
         float fogFactor = 1.0 - exp(-t * u_fogDensity);
-        vec3 fogColor = vec3(0.02, 0.03, 0.05);
-        sceneColor = mix(sceneColor, fogColor, fogFactor);
+        vec3 spaceBackdrop = renderSpaceBackground(rayDir, u_lightDir);
+        sceneColor = mix(sceneColor, spaceBackdrop * 0.55, fogFactor);
 
     } else {
-        // Deep natural midnight sky with subtle warm sun glow
-        float sunGlow = pow(max(dot(rayDir, u_lightDir), 0.0), 16.0);
-        vec3 skyTop = vec3(0.012, 0.016, 0.028);
-        vec3 skyBottom = vec3(0.004, 0.006, 0.010);
-        vec3 skyBg = mix(skyBottom, skyTop, clamp(rayDir.y * 0.5 + 0.5, 0.0, 1.0));
-        sceneColor = skyBg + vec3(0.12, 0.10, 0.07) * sunGlow;
+        // Photorealistic celestial background: Realistic stars & Milky Way dust cloud
+        sceneColor = renderSpaceBackground(rayDir, u_lightDir);
     }
 
     // Additive volumetric glow (cool blue-tinted atmospheric mist)
