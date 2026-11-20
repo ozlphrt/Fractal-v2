@@ -438,9 +438,14 @@ export class HUD {
   public resetAutoHideTimer() {
     if (this.autoHideTimer !== null) {
       window.clearTimeout(this.autoHideTimer);
+      this.autoHideTimer = null;
     }
+    // If debug screen is ON, auto hide is disabled
+    if (this.isDebugMode) return;
+
     // Auto-hide all onscreen HUD elements after 3.5 seconds of inactivity
     this.autoHideTimer = window.setTimeout(() => {
+      if (this.isDebugMode) return;
       const drawer = document.getElementById('settings-drawer');
       const drawerOpen = drawer && !drawer.classList.contains('closed');
       const popoverOpen = document.querySelector('.studio-popover:not(.closed)');
@@ -1652,8 +1657,17 @@ export class HUD {
       if (this.isDebugMode) {
         overlay.classList.remove('hidden');
         this.updateDebugOverlay();
+        // If debug screen is ON, auto hide is disabled: keep HUD visibly active
+        this.isHudFaded = false;
+        document.getElementById('hud-container')?.classList.remove('hud-faded');
+        if (this.autoHideTimer !== null) {
+          window.clearTimeout(this.autoHideTimer);
+          this.autoHideTimer = null;
+        }
       } else {
         overlay.classList.add('hidden');
+        // Resume normal auto-hide behavior when debug mode is toggled off
+        this.resetAutoHideTimer();
       }
     }
   }
