@@ -153,7 +153,41 @@
           <!-- Volumetrics & Lighting Tab -->
           <div class="tab-pane" id="tab-lighting">
             <div class="control-section">
-              <h3>Volumetric Atmosphere</h3>
+              <h3>3-Point Studio Lighting</h3>
+              <div class="control-row">
+                <label>Key Sun Intensity</label>
+                <input type="range" id="param-sun-intensity" min="0.0" max="2.0" step="0.05" value="1.0">
+                <span class="val-display" id="val-sun-intensity">1.00</span>
+              </div>
+              <div class="control-row">
+                <label>Rim / Backlight</label>
+                <input type="range" id="param-rim-intensity" min="0.0" max="1.5" step="0.05" value="0.45">
+                <span class="val-display" id="val-rim-intensity">0.45</span>
+              </div>
+              <div class="control-row">
+                <label>Rim Elevation</label>
+                <input type="range" id="param-rim-elevation" min="-30" max="90" step="1" value="30">
+                <span class="val-display" id="val-rim-elevation">30°</span>
+              </div>
+              <div class="control-row">
+                <label>Fill / Bounce Light</label>
+                <input type="range" id="param-fill-intensity" min="0.0" max="1.0" step="0.05" value="0.35">
+                <span class="val-display" id="val-fill-intensity">0.35</span>
+              </div>
+            </div>
+
+            <div class="control-section">
+              <h3>Sun Position & Atmosphere</h3>
+              <div class="control-row">
+                <label>Sun Azimuth</label>
+                <input type="range" id="param-light-azimuth" min="0" max="360" step="1" value="45">
+                <span class="val-display" id="val-light-azimuth">45°</span>
+              </div>
+              <div class="control-row">
+                <label>Sun Elevation</label>
+                <input type="range" id="param-light-elevation" min="-30" max="90" step="1" value="48">
+                <span class="val-display" id="val-light-elevation">48°</span>
+              </div>
               <div class="control-row">
                 <label>Fog Density</label>
                 <input type="range" id="param-fog" min="0.0" max="0.5" step="0.01" value="0.03">
@@ -164,21 +198,18 @@
                 <input type="range" id="param-godrays" min="0.0" max="1.5" step="0.05" value="0.0">
                 <span class="val-display" id="val-godrays">0.00</span>
               </div>
-              <div class="control-row">
-                <label>Light Azimuth</label>
-                <input type="range" id="param-light-azimuth" min="0" max="360" step="1" value="45">
-                <span class="val-display" id="val-light-azimuth">45°</span>
-              </div>
-              <div class="control-row">
-                <label>Light Elevation</label>
-                <input type="range" id="param-light-elevation" min="-30" max="90" step="1" value="50">
-                <span class="val-display" id="val-light-elevation">50°</span>
-              </div>
             </div>
           </div>
 
           <!-- Fractal Math Parameters Tab -->
           <div class="tab-pane" id="tab-params">
+            <div class="control-section">
+              <h3>Jump to Formula Family</h3>
+              <div class="control-row">
+                <label>Formula</label>
+                <select id="formula-dropdown-select" class="hud-select" style="grid-column: span 2; width: 100%;"></select>
+              </div>
+            </div>
             <div class="control-section" id="dynamic-formula-controls">
               <!-- Dynamically populated based on active formula -->
             </div>
@@ -199,6 +230,15 @@
                 <label>Base Velocity</label>
                 <input type="range" id="param-flight-speed" min="0.1" max="2.0" step="0.05" value="0.6">
                 <span class="val-display" id="val-flight-speed">0.60</span>
+              </div>
+              <div class="control-row">
+                <label>Tracking Headlamp</label>
+                <input type="checkbox" id="param-headlamp" checked>
+              </div>
+              <div class="control-row">
+                <label>Headlamp Beam</label>
+                <input type="range" id="param-headlamp-intensity" min="0.2" max="3.0" step="0.1" value="1.5">
+                <span class="val-display" id="val-headlamp-intensity">1.50</span>
               </div>
               <div class="control-row">
                 <label>Adaptive Proximity Scaling</label>

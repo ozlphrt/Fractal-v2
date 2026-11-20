@@ -1,9 +1,9 @@
 // src/formulas/registry.ts
-// Catalog of all 20 fractal formulas with GLSL DE snippets and CPU distance mirrors
+// Catalog of all 20 fractal formulas grouped into mathematical families with numbering
 // 100% natural, geological, mineral, and organic materials (rocks, sands, soils, moss, clays, slates)
 
 import { FormulaDefinition, PalettePreset } from '../core/types.ts';
-import { FORMULAS as RAW_FORMULAS, FORMULA_CYCLE_ORDER as RAW_ORDER, FORMULA_IDS } from './formulas-raw.ts';
+import { FORMULAS as RAW_FORMULAS, FORMULA_IDS } from './formulas-raw.ts';
 
 export { FORMULA_IDS };
 
@@ -82,7 +82,52 @@ export const PALETTES: PalettePreset[] = [
   }
 ];
 
-export const FORMULA_CYCLE_ORDER: string[] = RAW_ORDER;
+export interface FormulaGroup {
+  name: string;
+  badge: string;
+  ids: string[];
+}
+
+export const FORMULA_GROUPS: FormulaGroup[] = [
+  {
+    name: 'Spherical & Bulbs',
+    badge: '🔮 Bulbs',
+    ids: ['mandelbulb', 'juliabulb', 'helix_bulb']
+  },
+  {
+    name: 'Polyhedral & Kleinian',
+    badge: '💎 Kleinian',
+    ids: ['kalibox', 'pseudo_kleinian']
+  },
+  {
+    name: 'Cubic Lattices',
+    badge: '🧊 Cubes',
+    ids: ['jerusalem', 'twist_cube', 'vault_cube', 'menger']
+  },
+  {
+    name: 'Hypercomplex 4D Julia',
+    badge: '🌌 4D Julia',
+    ids: ['quat_julia', 'ribbon_julia', 'quartz_julia']
+  },
+  {
+    name: 'Origami & Reflection Folds',
+    badge: '📐 Origami',
+    ids: ['kifs', 'tetra']
+  },
+  {
+    name: 'Apollonian Sphere Gaskets',
+    badge: '🫧 Gaskets',
+    ids: ['apollonian', 'pearl_gasket', 'lace_gasket']
+  },
+  {
+    name: 'Non-Analytic & Gothic',
+    badge: '🏛️ Gothic',
+    ids: ['burning_ship', 'wind_ship', 'cathedral']
+  }
+];
+
+// Ordered list of formula IDs grouped logically
+export const FORMULA_CYCLE_ORDER: string[] = FORMULA_GROUPS.flatMap(g => g.ids);
 
 // Build typed definitions for all 20 formulas
 export const FORMULAS: Record<string, FormulaDefinition> = {};
@@ -103,4 +148,16 @@ for (const id of FORMULA_CYCLE_ORDER) {
       }
     };
   }
+}
+
+export function getFormulaGroup(id: string): FormulaGroup | undefined {
+  return FORMULA_GROUPS.find(g => g.ids.includes(id));
+}
+
+export function getFormulaNumberedTitle(id: string): string {
+  const index = FORMULA_CYCLE_ORDER.indexOf(id);
+  const f = FORMULAS[id];
+  if (!f) return id;
+  const num = index >= 0 ? `${index + 1}. ` : '';
+  return `${num}${f.name}`;
 }

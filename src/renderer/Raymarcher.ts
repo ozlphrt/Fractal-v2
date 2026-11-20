@@ -155,7 +155,8 @@ export class Raymarcher {
     camPos: Vec3,
     camTarget: Vec3,
     camUp: Vec3,
-    time: number
+    time: number,
+    isFlightMode: boolean = false
   ) {
     const gl = this.gl;
     this.resize();
@@ -224,6 +225,15 @@ export class Raymarcher {
     const ly = Math.sin(elRad);
     const lz = Math.cos(elRad) * Math.cos(azRad);
     set3f('u_lightDir', lx, ly, lz);
+    set1f('u_sunIntensity', settings.sunIntensity);
+    set1f('u_rimIntensity', settings.rimIntensity);
+    set1f('u_rimElevation', settings.rimElevation);
+    set1f('u_fillIntensity', settings.fillIntensity);
+
+    // Camera-Tracking Headlamp (Active ONLY in 6DOF Flight mode)
+    const headlampPower = (isFlightMode && settings.headlamp) ? settings.headlampIntensity : 0.0;
+    set1f('u_headlampIntensity', headlampPower);
+
     set1f('u_fogDensity', settings.fogDensity);
     set1f('u_godraysIntensity', settings.godraysIntensity);
 

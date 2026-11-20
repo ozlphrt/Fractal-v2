@@ -1,8 +1,8 @@
 // src/ui/HUD.ts
-// Glassmorphism HUD coordinator: tabs, parameter inputs, and mode switching
+// Glassmorphism HUD coordinator: tabs, parameter inputs, formula groups, and mode switching
 
 import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
-import { FORMULAS, FORMULA_CYCLE_ORDER, PALETTES } from '../formulas/registry.ts';
+import { FORMULAS, FORMULA_CYCLE_ORDER, FORMULA_GROUPS, PALETTES, getFormulaGroup } from '../formulas/registry.ts';
 
 export class HUD {
   public settings: RenderSettings;
@@ -29,10 +29,20 @@ export class HUD {
       emissiveVeins: 0.0,
       bloomIntensity: 0.25,
       exposure: 1.0,
+
+      // 3-Point Studio Lighting & Atmosphere
+      sunIntensity: 1.0,
+      rimIntensity: 0.45,
+      rimElevation: 30,
+      fillIntensity: 0.35,
+      headlamp: true,
+      headlampIntensity: 1.5,
       fogDensity: 0.03,
       godraysIntensity: 0.0,
       lightAzimuth: 45,
       lightElevation: 48,
+
+      // Flight Sim
       flightSpeed: 0.6,
       adaptiveSpeed: true,
       wallCushion: true,
@@ -72,20 +82,65 @@ export class HUD {
       this.onModeChange?.('flight');
     });
 
-    // Formula cycle
+    // Formula label update helper
     const labelFormula = document.getElementById('current-formula-label')!;
-    labelFormula.textContent = this.getActiveFormula().name;
+    const updateFormulaDisplay = () => {
+      const f = this.getActiveFormula();
+      const group = getFormulaGroup(f.id);
+      const title = `${this.activeFormulaIndex + 1}. ${f.name}`;
+      labelFormula.textContent = title;
+      labelFormula.title = group ? `${group.badge} — ${f.subtitle}` : f.subtitle;
 
+      const dropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement;
+      if (dropdown && dropdown.value !== f.id) {
+        dropdown.value = f.id;
+      }
+    };
+
+    updateFormulaDisplay();
+
+    // Populate Grouped Formula Dropdown
+    const dropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement;
+    if (dropdown) {
+      dropdown.innerHTML = '';
+      for (const group of FORMULA_GROUPS) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = `${group.badge} (${group.name})`;
+        for (const id of group.ids) {
+          const f = FORMULAS[id];
+          if (!f) continue;
+          const idx = this.formulaList.findIndex(item => item.id === id);
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = `${idx + 1}. ${f.name}`;
+          optgroup.appendChild(opt);
+        }
+        dropdown.appendChild(optgroup);
+      }
+
+      dropdown.addEventListener('change', () => {
+        const targetId = dropdown.value;
+        const targetIdx = this.formulaList.findIndex(f => f.id === targetId);
+        if (targetIdx >= 0) {
+          this.activeFormulaIndex = targetIdx;
+          updateFormulaDisplay();
+          this.populateFormulaParams();
+          this.onFormulaChange?.(this.getActiveFormula());
+        }
+      });
+    }
+
+    // Formula prev/next arrows
     document.getElementById('btn-prev-formula')!.addEventListener('click', () => {
       this.activeFormulaIndex = (this.activeFormulaIndex - 1 + this.formulaList.length) % this.formulaList.length;
-      labelFormula.textContent = this.getActiveFormula().name;
+      updateFormulaDisplay();
       this.populateFormulaParams();
       this.onFormulaChange?.(this.getActiveFormula());
     });
 
     document.getElementById('btn-next-formula')!.addEventListener('click', () => {
       this.activeFormulaIndex = (this.activeFormulaIndex + 1) % this.formulaList.length;
-      labelFormula.textContent = this.getActiveFormula().name;
+      updateFormulaDisplay();
       this.populateFormulaParams();
       this.onFormulaChange?.(this.getActiveFormula());
     });
@@ -148,7 +203,7 @@ export class HUD {
       });
     });
 
-    // Bind range sliders
+    // Bind range sliders for optics
     this.bindRange('param-focal-dist', 'val-focal-dist', val => this.settings.focalDistance = val);
     this.bindRange('param-aperture', 'val-aperture', val => this.settings.aperture = val);
     this.bindRange('param-ior', 'val-ior', val => this.settings.ior = val);
@@ -157,11 +212,26 @@ export class HUD {
     this.bindRange('param-emissive', 'val-emissive', val => this.settings.emissiveVeins = val);
     this.bindRange('param-bloom', 'val-bloom', val => this.settings.bloomIntensity = val);
     this.bindRange('param-exposure', 'val-exposure', val => this.settings.exposure = val);
-    this.bindRange('param-fog', 'val-fog', val => this.settings.fogDensity = val);
-    this.bindRange('param-godrays', 'val-godrays', val => this.settings.godraysIntensity = val);
+
+    // Bind range sliders for 3-point lighting
+    this.bindRange('param-sun-intensity', 'val-sun-intensity', val => this.settings.sunIntensity = val);
+    this.bindRange('param-rim-intensity', 'val-rim-intensity', val => this.settings.rimIntensity = val);
+    this.bindRange('param-rim-elevation', 'val-rim-elevation', val => this.settings.rimElevation = val, '°');
+    this.bindRange('param-fill-intensity', 'val-fill-intensity', val => this.settings.fillIntensity = val);
     this.bindRange('param-light-azimuth', 'val-light-azimuth', val => this.settings.lightAzimuth = val, '°');
     this.bindRange('param-light-elevation', 'val-light-elevation', val => this.settings.lightElevation = val, '°');
+    this.bindRange('param-fog', 'val-fog', val => this.settings.fogDensity = val);
+    this.bindRange('param-godrays', 'val-godrays', val => this.settings.godraysIntensity = val);
+
+    // Bind Flight controls
     this.bindRange('param-flight-speed', 'val-flight-speed', val => this.settings.flightSpeed = val);
+    this.bindRange('param-headlamp-intensity', 'val-headlamp-intensity', val => this.settings.headlampIntensity = val);
+
+    const checkHeadlamp = document.getElementById('param-headlamp') as HTMLInputElement;
+    checkHeadlamp?.addEventListener('change', () => {
+      this.settings.headlamp = checkHeadlamp.checked;
+      this.onSettingChange?.();
+    });
 
     const checkAdaptive = document.getElementById('param-adaptive-speed') as HTMLInputElement;
     checkAdaptive?.addEventListener('change', () => {
@@ -194,9 +264,10 @@ export class HUD {
   public populateFormulaParams() {
     const container = document.getElementById('dynamic-formula-controls');
     if (!container) return;
-    container.innerHTML = `<h3>${this.getActiveFormula().name} Parameters</h3>`;
+    const formula = this.getActiveFormula();
+    container.innerHTML = `<h3>${this.activeFormulaIndex + 1}. ${formula.name} Parameters</h3>`;
 
-    for (const p of this.getActiveFormula().params) {
+    for (const p of formula.params) {
       const row = document.createElement('div');
       row.className = 'control-row';
       row.innerHTML = `

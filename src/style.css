@@ -422,3 +422,35 @@ html, body, #app {
 .flight-instructions strong {
   color: var(--text-main);
 }
+
+/* Dropdown select styling for formula groups */
+.hud-select {
+  background: rgba(14, 17, 24, 0.95);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+.hud-select:focus {
+  border-color: var(--accent-cyan);
+}
+
+.hud-select optgroup {
+  color: var(--accent-cyan);
+  font-weight: 700;
+  background: #0d1117;
+  padding: 0.4rem;
+}
+
+.hud-select option {
+  color: var(--text-main);
+  background: #161b22;
+  font-weight: normal;
+  padding: 0.35rem;
+}

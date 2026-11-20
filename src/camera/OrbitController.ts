@@ -1,13 +1,15 @@
 // src/camera/OrbitController.ts
-// Smooth momentum turntable orbit controller
+// Smooth momentum turntable orbit controller with right-click panning and Q/E keyboard support
 
 import { Camera } from './Camera.ts';
+import { Vec3 } from '../core/math.ts';
 
 export class OrbitController {
   private camera: Camera;
   private canvas: HTMLCanvasElement;
 
   private isDragging = false;
+  private dragMode: 'orbit' | 'pan' = 'orbit';
   private lastMouseX = 0;
   private lastMouseY = 0;
 
@@ -40,8 +42,19 @@ export class OrbitController {
   }
 
   private bindEvents() {
+    // Disable default browser context menu on right-click to enable panning
+    this.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
     this.canvas.addEventListener('pointerdown', (e) => {
       this.isDragging = true;
+      // Button 2 is right click, button 1 is middle click, or shift + left click
+      if (e.button === 2 || e.button === 1 || e.shiftKey) {
+        this.dragMode = 'pan';
+      } else {
+        this.dragMode = 'orbit';
+      }
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
     });
@@ -57,9 +70,25 @@ export class OrbitController {
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
 
-      this.targetTheta -= dx * 0.006;
-      this.targetPhi = Math.max(0.01, Math.min(Math.PI - 0.01, this.targetPhi - dy * 0.006));
-      this.onChange?.();
+      if (this.dragMode === 'pan') {
+        // Right-click Pan: move both target and position along camera right and up vectors
+        const right = this.camera.getRight();
+        const up = this.camera.up.clone().normalize();
+        const panFactor = this.radius * 0.0016;
+
+        const panOffset = new Vec3()
+          .addScaled(right, -dx * panFactor)
+          .addScaled(up, dy * panFactor);
+
+        this.camera.target.add(panOffset);
+        this.camera.position.add(panOffset);
+        this.onChange?.();
+      } else {
+        // Left-click Orbit: rotate around target
+        this.targetTheta -= dx * 0.006;
+        this.targetPhi = Math.max(0.01, Math.min(Math.PI - 0.01, this.targetPhi - dy * 0.006));
+        this.onChange?.();
+      }
     });
 
     this.canvas.addEventListener('wheel', (e) => {
@@ -68,6 +97,18 @@ export class OrbitController {
       this.targetRadius = Math.max(0.05, Math.min(12.0, this.targetRadius * (1.0 + zoomDelta)));
       this.onChange?.();
     }, { passive: false });
+
+    // Keyboard support in Orbit mode: Q and E to orbit left/right
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (key === 'q' || e.code === 'KeyQ') {
+        this.targetTheta += 0.08;
+        this.onChange?.();
+      } else if (key === 'e' || e.code === 'KeyE') {
+        this.targetTheta -= 0.08;
+        this.onChange?.();
+      }
+    });
   }
 
   public update(dt: number) {

@@ -34,13 +34,15 @@ export class FlightController {
   }
 
   private bindEvents() {
-    window.addEventListener('keydown', (e) => {
-      this.keys[e.code] = true;
-    });
+    const setKey = (e: KeyboardEvent, isDown: boolean) => {
+      this.keys[e.code] = isDown;
+      if (e.key) {
+        this.keys[e.key.toLowerCase()] = isDown;
+      }
+    };
 
-    window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
-    });
+    window.addEventListener('keydown', (e) => setKey(e, true));
+    window.addEventListener('keyup', (e) => setKey(e, false));
 
     this.canvas.addEventListener('pointerdown', (e) => {
       this.isPointerDown = true;
@@ -85,21 +87,23 @@ export class FlightController {
     }
 
     // Boost & Brake
-    if (this.keys['Space']) currentSpeed *= 2.5;
-    if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) currentSpeed *= 0.35;
+    const hasKey = (...names: string[]) => names.some(n => !!this.keys[n]);
+
+    if (hasKey('Space', ' ')) currentSpeed *= 2.5;
+    if (hasKey('ShiftLeft', 'ShiftRight', 'Shift')) currentSpeed *= 0.35;
 
     // Movement input acceleration
     const accel = new Vec3();
-    if (this.keys['KeyW']) accel.add(forward);
-    if (this.keys['KeyS']) accel.sub(forward);
-    if (this.keys['KeyD']) accel.add(right);
-    if (this.keys['KeyA']) accel.sub(right);
-    if (this.keys['KeyR']) accel.add(up);
-    if (this.keys['KeyF']) accel.sub(up);
+    if (hasKey('KeyW', 'w')) accel.add(forward);
+    if (hasKey('KeyS', 's')) accel.sub(forward);
+    if (hasKey('KeyD', 'd')) accel.add(right);
+    if (hasKey('KeyA', 'a')) accel.sub(right);
+    if (hasKey('KeyR', 'r')) accel.add(up);
+    if (hasKey('KeyF', 'f')) accel.sub(up);
 
     // Roll input (Q / E)
-    if (this.keys['KeyQ']) this.angularVelocity.z += 1.5 * dt;
-    if (this.keys['KeyE']) this.angularVelocity.z -= 1.5 * dt;
+    if (hasKey('KeyQ', 'q')) this.angularVelocity.z += 2.0 * dt;
+    if (hasKey('KeyE', 'e')) this.angularVelocity.z -= 2.0 * dt;
 
     if (accel.lengthSq() > 0) {
       accel.normalize().scale(currentSpeed);
@@ -126,15 +130,23 @@ export class FlightController {
     // Apply movement
     this.camera.position.addScaled(this.velocity, dt);
 
-    // Apply angular rotation
+    // Apply angular rotation (Pitch, Yaw, and Roll)
     if (this.angularVelocity.lengthSq() > 1e-6) {
-      // Rotate forward around right (pitch)
       const pitch = this.angularVelocity.x;
       const yaw = this.angularVelocity.y;
+      const roll = this.angularVelocity.z;
 
-      // Update target based on forward rotation
+      // Apply Roll: rotate camera up vector around forward
+      if (Math.abs(roll) > 1e-5) {
+        const cosR = Math.cos(roll);
+        const sinR = Math.sin(roll);
+        const rolledUp = up.clone().scale(cosR).add(right.clone().scale(sinR)).normalize();
+        this.camera.up.copy(rolledUp);
+      }
+
+      // Apply Pitch and Yaw to forward target
       const newForward = forward.clone()
-        .addScaled(up, pitch)
+        .addScaled(this.camera.up, pitch)
         .addScaled(right, yaw)
         .normalize();
 

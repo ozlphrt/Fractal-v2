@@ -139,7 +139,8 @@ class App {
         this.camera.position,
         this.camera.target,
         this.camera.up,
-        now * 0.001
+        now * 0.001,
+        this.hud.currentMode === 'flight'
       );
 
       // Update HUD stats

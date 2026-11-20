@@ -44,6 +44,11 @@ uniform float u_emissiveVeins;
 
 // Volumetrics & Lighting
 uniform vec3 u_lightDir;
+uniform float u_sunIntensity;
+uniform float u_rimIntensity;
+uniform float u_rimElevation;
+uniform float u_fillIntensity;
+uniform float u_headlampIntensity;
 uniform float u_fogDensity;
 uniform float u_godraysIntensity;
 
@@ -195,12 +200,37 @@ void main() {
         vec3 sunColor = vec3(1.0, 0.94, 0.85);
         vec3 ambientFill = vec3(0.14, 0.16, 0.20) * (0.5 + 0.5 * nor.y);
 
-        // Assemble balanced geological surface lighting
-        vec3 directLight = diff * shadow * sunColor * 0.95;
-        vec3 specularLight = spec * shadow * sunColor * 0.22;
+        // 1. Primary Key Light (Sun)
+        vec3 directLight = diff * shadow * sunColor * 0.95 * u_sunIntensity;
+        vec3 specularLight = spec * shadow * sunColor * 0.22 * u_sunIntensity;
         vec3 ambientLight = ambientFill * ao * 0.6;
 
-        sceneColor = (directLight + ambientLight) * albedo + specularLight;
+        // 2. Secondary Fill / Bounce Light (soft complementary light)
+        vec3 fillDir = normalize(vec3(-u_lightDir.z, 0.35, u_lightDir.x));
+        float fillDiff = clamp(dot(nor, fillDir), 0.0, 1.0);
+        vec3 fillLight = fillDiff * u_fillIntensity * vec3(0.85, 0.90, 0.95);
+
+        // 3. Rim / Backlight (opposing edge light to illuminate silhouettes)
+        float rimRad = radians(u_rimElevation);
+        vec3 rimDir = normalize(vec3(-u_lightDir.x, sin(rimRad), -u_lightDir.z));
+        float rimDiff = clamp(dot(nor, rimDir), 0.0, 1.0);
+        float rimFresnel = pow(clamp(1.0 + dot(nor, rayDir), 0.0, 1.0), 3.0);
+        vec3 rimLight = (rimDiff * 0.45 + rimFresnel * 0.55) * u_rimIntensity * vec3(0.70, 0.82, 1.0);
+
+        // 4. Camera-Tracking Flashlight / Headlamp (used in 6DOF Flight Mode)
+        vec3 headlampLight = vec3(0.0);
+        if (u_headlampIntensity > 0.01) {
+            vec3 toLight = u_camPos - hitPos;
+            float lDist = length(toLight);
+            vec3 lDir = toLight / max(lDist, 1e-4);
+            float spotAlign = dot(-lDir, cw); // cw is camera forward
+            float spotCone = smoothstep(0.68, 0.92, spotAlign);
+            float spotAtten = 1.0 / (1.0 + 0.35 * lDist + 0.15 * lDist * lDist);
+            float spotDiff = max(dot(nor, lDir), 0.0);
+            headlampLight = spotDiff * spotCone * spotAtten * u_headlampIntensity * vec3(1.0, 0.97, 0.92);
+        }
+
+        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * albedo + specularLight + rimLight * albedo;
 
         // Subtle optional emissive veins
         if (u_emissiveVeins > 0.01) {

@@ -47,6 +47,12 @@ export interface RenderSettings {
   exposure: number;
 
   // Volumetrics & Lighting
+  sunIntensity: number;
+  rimIntensity: number;
+  rimElevation: number;
+  fillIntensity: number;
+  headlamp: boolean;
+  headlampIntensity: number;
   fogDensity: number;
   godraysIntensity: number;
   lightAzimuth: number;
