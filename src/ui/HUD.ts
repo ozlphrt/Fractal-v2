@@ -20,6 +20,10 @@ export class HUD {
   private formulaList: FormulaDefinition[] = FORMULA_CYCLE_ORDER.map(id => FORMULAS[id]).filter(Boolean);
 
   constructor() {
+    // Default to Lace Gasket
+    const defaultIdx = this.formulaList.findIndex(f => f.id === 'lace_gasket');
+    this.activeFormulaIndex = defaultIdx >= 0 ? defaultIdx : 0;
+
     this.settings = {
       focalDistance: 2.35,
       aperture: 0.0,
