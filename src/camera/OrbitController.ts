@@ -87,7 +87,7 @@ export class OrbitController {
       this.camera.target.z + z
     );
 
-    if (this.camera.position.sub(oldPos).lengthSq() > 1e-6) {
+    if (this.camera.position.distanceToSq(oldPos) > 1e-6) {
       this.onChange?.();
     }
   }

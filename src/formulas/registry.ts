@@ -1,48 +1,81 @@
 // src/formulas/registry.ts
-// Catalog of fractal formulas with GLSL DE snippets and CPU distance mirrors for proximity flight scaling
+// Catalog of fractal formulas with GLSL DE snippets and CPU distance mirrors
+// 100% natural, geological, mineral, and organic materials (rocks, sands, soils, moss, clays, slates)
 
 import { FormulaDefinition, PalettePreset } from '../core/types.ts';
 
 export const PALETTES: PalettePreset[] = [
   {
-    id: 'amethyst_quartz',
-    name: 'Amethyst Quartz',
-    a: [0.5, 0.5, 0.5],
-    b: [0.5, 0.5, 0.5],
-    c: [1.0, 1.0, 1.0],
-    d: [0.5, 0.2, 0.8]
+    id: 'desert_sandstone',
+    name: 'Desert Sandstone',
+    a: [0.45, 0.30, 0.18],
+    b: [0.18, 0.12, 0.08],
+    c: [1.00, 1.00, 1.00],
+    d: [0.00, 0.10, 0.20]
   },
   {
-    id: 'obsidian_gold',
-    name: 'Obsidian & Gold',
-    a: [0.2, 0.15, 0.1],
-    b: [0.8, 0.7, 0.4],
-    c: [1.0, 1.0, 1.0],
-    d: [0.0, 0.1, 0.2]
+    id: 'forest_moss',
+    name: 'Forest Moss & Cedar',
+    a: [0.26, 0.32, 0.20],
+    b: [0.14, 0.16, 0.10],
+    c: [1.00, 1.20, 1.00],
+    d: [0.10, 0.25, 0.40]
   },
   {
-    id: 'cyan_bioluminescence',
-    name: 'Deep Sea Bioluminescence',
-    a: [0.1, 0.3, 0.4],
-    b: [0.3, 0.6, 0.8],
-    c: [0.8, 1.0, 1.0],
-    d: [0.0, 0.33, 0.67]
+    id: 'dark_loam',
+    name: 'Dark Loam & Soil',
+    a: [0.24, 0.18, 0.13],
+    b: [0.14, 0.10, 0.07],
+    c: [1.00, 1.00, 1.00],
+    d: [0.05, 0.10, 0.15]
   },
   {
-    id: 'lapis_lazuli',
-    name: 'Lapis Lazuli',
-    a: [0.1, 0.2, 0.5],
-    b: [0.4, 0.5, 0.7],
-    c: [1.0, 1.0, 1.0],
-    d: [0.1, 0.25, 0.6]
+    id: 'ancient_limestone',
+    name: 'Ancient Limestone',
+    a: [0.46, 0.44, 0.38],
+    b: [0.14, 0.12, 0.10],
+    c: [1.00, 1.00, 1.00],
+    d: [0.00, 0.08, 0.15]
   },
   {
-    id: 'solar_flare',
-    name: 'Solar Flare Magma',
-    a: [0.5, 0.4, 0.3],
-    b: [0.6, 0.4, 0.2],
-    c: [2.0, 1.0, 0.5],
-    d: [0.0, 0.15, 0.3]
+    id: 'volcanic_basalt',
+    name: 'Volcanic Basalt',
+    a: [0.18, 0.19, 0.21],
+    b: [0.10, 0.10, 0.11],
+    c: [1.00, 1.00, 1.00],
+    d: [0.00, 0.05, 0.10]
+  },
+  {
+    id: 'terracotta_adobe',
+    name: 'Terracotta Clay',
+    a: [0.44, 0.24, 0.15],
+    b: [0.18, 0.11, 0.07],
+    c: [1.00, 1.00, 1.00],
+    d: [0.00, 0.08, 0.16]
+  },
+  {
+    id: 'riverbed_granite',
+    name: 'Riverbed Granite',
+    a: [0.34, 0.34, 0.36],
+    b: [0.12, 0.12, 0.14],
+    c: [1.20, 1.20, 1.00],
+    d: [0.00, 0.05, 0.10]
+  },
+  {
+    id: 'weathered_timber',
+    name: 'Weathered Timber',
+    a: [0.40, 0.36, 0.32],
+    b: [0.12, 0.11, 0.10],
+    c: [1.00, 1.00, 1.00],
+    d: [0.05, 0.10, 0.15]
+  },
+  {
+    id: 'nordic_slate',
+    name: 'Nordic Slate',
+    a: [0.22, 0.26, 0.32],
+    b: [0.10, 0.12, 0.15],
+    c: [1.00, 1.00, 1.20],
+    d: [0.20, 0.25, 0.35]
   }
 ];
 

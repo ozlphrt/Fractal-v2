@@ -58,6 +58,17 @@ export class Vec3 {
     return Math.sqrt(this.lengthSq());
   }
 
+  distanceToSq(v: Vec3): number {
+    const dx = this.x - v.x;
+    const dy = this.y - v.y;
+    const dz = this.z - v.z;
+    return dx * dx + dy * dy + dz * dz;
+  }
+
+  distanceTo(v: Vec3): number {
+    return Math.sqrt(this.distanceToSq(v));
+  }
+
   normalize(): this {
     const len = this.length();
     if (len > 1e-6) {
