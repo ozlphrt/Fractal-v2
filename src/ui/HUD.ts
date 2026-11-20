@@ -437,7 +437,11 @@ export class HUD {
     };
 
     this.keyframeEngine.onCycleComplete = () => {
-      if (this.tourActive) this.advanceTour();
+      if (this.tourActive) {
+        this.advanceTour();
+      } else if (this.isRandomMode) {
+        this.advanceRandomFormula();
+      }
     };
   }
 
@@ -571,6 +575,12 @@ export class HUD {
     btnDockRandom?.classList.add('rolling');
     setTimeout(() => btnDockRandom?.classList.remove('rolling'), 700);
 
+    // If random mode is already running, tapping the dice immediately jumps to a new random formula!
+    if (this.isRandomMode && this.keyframeEngine.isPlaying) {
+      this.advanceRandomFormula();
+      return;
+    }
+
     const f = this.getActiveFormula();
     const curParams = this.getDynamicParams();
     const loop = ProceduralFlythrough.generateLoop(f, curParams, this.activePaletteIndex);
@@ -601,8 +611,83 @@ export class HUD {
     setTimeout(() => {
       if (!this.isRandomMode) return;
       this.keyframeEngine.play(f.id);
+      this.warmNextRandomFormula();
       this.refreshGlobalKeyframeTrack();
     }, glideDuration * 1000 + 40);
+  }
+
+  private randomFormulaHistory: number[] = [];
+
+  private advanceRandomFormula() {
+    this.isRandomMode = true;
+    this.keyframeEngine.stop();
+
+    const total = this.formulaList.length;
+    if (this.randomFormulaHistory.length >= total - 1) {
+      this.randomFormulaHistory = [this.activeFormulaIndex];
+    }
+    const candidates: number[] = [];
+    for (let i = 0; i < total; i++) {
+      if (i !== this.activeFormulaIndex && !this.randomFormulaHistory.includes(i)) {
+        candidates.push(i);
+      }
+    }
+    const nextIdx = candidates.length > 0
+      ? candidates[Math.floor(Math.random() * candidates.length)]
+      : (this.activeFormulaIndex + 1) % total;
+
+    this.randomFormulaHistory.push(nextIdx);
+    const nextFormula = this.formulaList[nextIdx];
+
+    this.onWarmFormula?.(nextFormula);
+    const proceed = () => {
+      this.tourTimer = null;
+      if (!this.isRandomMode) return;
+      if (this.isFormulaReady && !this.isFormulaReady(nextFormula)) {
+        this.tourTimer = window.setTimeout(proceed, 100);
+        return;
+      }
+      this.beginRandomFormulaTransition(nextIdx);
+    };
+    proceed();
+  }
+
+  private beginRandomFormulaTransition(nextIdx: number) {
+    this.selectFormula(nextIdx, true);
+    const f = this.formulaList[nextIdx];
+    const curParams = this.getDynamicParams();
+    const randomPalIdx = Math.floor(Math.random() * PALETTES.length);
+    const loop = ProceduralFlythrough.generateLoop(f, curParams, randomPalIdx);
+
+    this.keyframeEngine.replaceTrackForFormula(f.id, loop);
+    this.keyframeEngine.segmentDuration = 7.5;
+    this.keyframeEngine.cycleAtLastKeyframe = false;
+
+    const firstFrame = loop[0];
+    const duration = 2.0;
+    this.transitionToGlobalKeyframe(firstFrame, duration);
+    this.refreshGlobalKeyframeTrack();
+
+    this.tourTimer = window.setTimeout(() => {
+      this.tourTimer = null;
+      if (!this.isRandomMode) return;
+      this.keyframeEngine.play(f.id);
+      this.warmNextRandomFormula();
+      this.refreshGlobalKeyframeTrack();
+    }, duration * 1000 + 60);
+  }
+
+  private warmNextRandomFormula() {
+    const total = this.formulaList.length;
+    const candidates: number[] = [];
+    for (let i = 0; i < total; i++) {
+      if (i !== this.activeFormulaIndex && !this.randomFormulaHistory.includes(i)) {
+        candidates.push(i);
+      }
+    }
+    if (candidates.length > 0) {
+      this.onWarmFormula?.(this.formulaList[candidates[0]]);
+    }
   }
 
   private advanceTour() {
