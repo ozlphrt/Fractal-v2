@@ -2,6 +2,7 @@
 // Primary raymarching shader supporting thin-lens DoF, chromatic dispersion, SSS, and volumetrics
 
 import { COMMON_GLSL } from './common.glsl.ts';
+import { FormulaDefinition } from '../../core/types.ts';
 
 export const RAYMARCH_VERT = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 a_position;
@@ -13,7 +14,11 @@ void main() {
 }
 `;
 
-export function buildRaymarchFrag(formulaGLSL: string): string {
+export function buildRaymarchFrag(formula: FormulaDefinition): string {
+  const formulaUniforms = formula.params
+    .map(p => `uniform ${p.type === 'int' ? 'int' : 'float'} ${p.uniform};`)
+    .join('\n');
+
   return /* glsl */ `#version 300 es
 precision highp float;
 
@@ -48,10 +53,13 @@ uniform vec3 u_palB;
 uniform vec3 u_palC;
 uniform vec3 u_palD;
 
+// Formula-specific dynamic parameter uniforms
+${formulaUniforms}
+
 ${COMMON_GLSL}
 
 // Injected formula distance estimator
-${formulaGLSL}
+${formula.glslDE}
 
 // Normal calculation via tetrahedron gradient
 vec3 calcNormal(vec3 pos) {

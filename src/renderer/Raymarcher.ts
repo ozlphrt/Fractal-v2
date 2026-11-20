@@ -127,7 +127,7 @@ export class Raymarcher {
       throw new Error(`Vertex compile failed: ${gl.getShaderInfoLog(vert)}`);
     }
 
-    const fragSource = buildRaymarchFrag(formula.glslDE);
+    const fragSource = buildRaymarchFrag(formula);
     const frag = gl.createShader(gl.FRAGMENT_SHADER)!;
     gl.shaderSource(frag, fragSource);
     gl.compileShader(frag);
