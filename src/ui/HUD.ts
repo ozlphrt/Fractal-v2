@@ -635,9 +635,9 @@ export class HUD {
     this.keyframeEngine.cycleAtLastKeyframe = true; // Auto-cycle to next random formula when complete!
     this.isRandomMode = true;
 
-    // Smoothly transition into the first waypoint
+    // Smoothly transition into the first waypoint aligned with segmentDuration
     const firstFrame = loop[0];
-    const glideDuration = 1.8;
+    const glideDuration = this.keyframeEngine.segmentDuration;
     this.transitionToGlobalKeyframe(firstFrame, glideDuration);
     this.refreshGlobalKeyframeTrack();
 
@@ -682,7 +682,8 @@ export class HUD {
     this.keyframeEngine.cycleAtLastKeyframe = true; // Auto-cycle to next random formula!
 
     const firstFrame = loop[0];
-    const duration = 2.0;
+    // Keep formula-to-formula transitions aligned with in-formula motions (6.5s) for seamless, smooth pacing
+    const duration = this.keyframeEngine.segmentDuration;
     this.transitionToGlobalKeyframe(firstFrame, duration);
     this.refreshGlobalKeyframeTrack();
 
@@ -742,7 +743,7 @@ export class HUD {
   private beginTourTransition(next: number) {
     this.selectFormula(next, true);
     const first = this.keyframeEngine.getFramesFor(this.formulaList[next].id)[0];
-    const duration = 2.0;
+    const duration = this.keyframeEngine.segmentDuration;
     this.transitionToGlobalKeyframe(first, duration);
     this.refreshGlobalKeyframeTrack();
     this.tourTimer = window.setTimeout(() => {
@@ -1389,7 +1390,7 @@ export class HUD {
       const u2: [number, number, number] = [tDir[0] / tLen, tDir[1] / tLen, tDir[2] / tLen];
 
       const curDir = slerpVec3(u1, u2, t);
-      const curRadius = startCam.orbitRadius + (targetCam.orbitRadius - startCam.orbitRadius) * t;
+      const curRadius = sLen + (tLen - sLen) * t;
       const curUp = slerpVec3(startCam.up, targetCam.up, t);
 
       const curCam: CameraSnapshot = {

@@ -24,8 +24,8 @@ export class Raymarcher {
   private hasRenderedAtLeastOnce: boolean = false;
 
   // Live formula cross-fade: the outgoing formula keeps rendering (with its own params) while it dissolves
-  /** Duration in seconds of the next formula cross-fade */
-  public crossfadeDuration: number = 1.2;
+  /** Duration in seconds of the next formula cross-fade (aligned with 6.5s in-formula pacing) */
+  public crossfadeDuration: number = 6.5;
   private transitionProgress: number = 1.0;
   private prevFormula: FormulaDefinition | null = null;
   private prevProgram: WebGLProgram | null = null;

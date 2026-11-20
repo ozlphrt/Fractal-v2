@@ -73,11 +73,12 @@ class App {
     };
 
     this.hud.onFormulaChange = (formula, fromTour) => {
-      // Tour: long, glide-matched dissolve. Manual switch: a quicker (still smooth) one.
-      this.raymarcher.crossfadeDuration = fromTour ? 2.0 : 0.9;
+      // Tour & Random mode: aligned with 6.5s in-formula pacing for an ultra-seamless, smooth, slow dissolve.
+      // Manual switch: 2.5s for a graceful interactive dissolve.
+      this.raymarcher.crossfadeDuration = fromTour ? 6.5 : 2.5;
       // During the auto-play tour the HUD drives the camera itself (glides to the next loop's first keyframe)
       if (!fromTour) {
-        this.orbitController.transitionTo(formula.defaultCam.pos, formula.defaultCam.target, [0, 1, 0], 0.85);
+        this.orbitController.transitionTo(formula.defaultCam.pos, formula.defaultCam.target, [0, 1, 0], 1.5);
       }
       invalidateAccum();
     };
