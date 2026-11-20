@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0d0f12">
   <meta name="color-scheme" content="dark">
-  <title>Fractal Studio v2 — Industrial Raymarching & Flight Simulator</title>
+  <title>Fractal Studio v2 — Industrial Raymarching Platform</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2314171c'/><circle cx='50' cy='50' r='32' fill='none' stroke='%233d7be6' stroke-width='8'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,18 +30,7 @@
           <span class="telem-sep">/</span>
           <span class="telem-item" id="accum-samples-pill">Interactive</span>
         </div>
-
-        <div class="hud-mode-segment">
-          <button class="mode-btn active" id="btn-mode-orbit" title="Turntable Orbit Mode">ORBIT</button>
-          <button class="mode-btn" id="btn-mode-flight" title="6DOF Flight Cockpit Simulator">6DOF FLIGHT</button>
-        </div>
       </header>
-
-      <!-- Center Crosshair for Flight Mode & Click-to-Focus Depth of Field -->
-      <div id="view-crosshair" class="hidden">
-        <div class="crosshair-reticle"></div>
-        <div class="crosshair-point"></div>
-      </div>
 
       <!-- Formula Selection Popover (Tapped from bottom dock) -->
       <div class="studio-popover closed" id="formula-popover" role="dialog" aria-modal="true" aria-label="Formula Archive">
@@ -103,7 +92,7 @@
             <span>Accumulate</span>
           </button>
 
-          <button class="action-icon-btn" id="btn-reset-cam" title="Reset Viewpoint">
+          <button class="action-icon-btn" id="btn-reset-cam" title="Reset Viewpoint & Recenter">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
               <path d="M3 3v5h5"/>
@@ -139,8 +128,7 @@
         <nav class="drawer-tabs">
           <button class="tab-btn active" data-tab="tab-optics">Optics</button>
           <button class="tab-btn" data-tab="tab-lighting">Lighting</button>
-          <button class="tab-btn" data-tab="tab-params">Math</button>
-          <button class="tab-btn" data-tab="tab-flight">6DOF Flight</button>
+          <button class="tab-btn" data-tab="tab-params">Fractal Math</button>
         </nav>
 
         <div class="drawer-content">
@@ -198,6 +186,31 @@
                 <label>Exposure</label>
                 <input type="range" id="param-exposure" min="0.2" max="3.0" step="0.05" value="1.0">
                 <span class="val-display" id="val-exposure">1.00</span>
+              </div>
+            </div>
+
+            <!-- Tab Footer: Keyframe Loop & Storage -->
+            <div class="tab-bottom-section">
+              <div class="tab-keyframe-track" data-tab="tab-optics">
+                <div class="keyframe-track-header">
+                  <div class="keyframe-track-title">
+                    <span class="track-tag">ANIMATION LOOP</span>
+                    <span class="keyframe-count-badge" id="kf-count-tab-optics">0 Frames</span>
+                  </div>
+                  <div class="keyframe-track-controls">
+                    <button class="keyframe-play-btn" id="btn-play-tab-optics" title="Play/Pause tab animation loop">▶ Loop</button>
+                    <button class="keyframe-add-btn" id="btn-add-tab-optics" title="Capture current state into keyframe">+ Keyframe</button>
+                  </div>
+                </div>
+                <div class="keyframe-strip" id="kf-strip-tab-optics"></div>
+              </div>
+
+              <div class="tab-storage-actions">
+                <button class="studio-btn-action save-defaults-btn" data-tab="tab-optics">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                  <span>Save Defaults</span>
+                </button>
+                <button class="studio-btn-subtle reset-defaults-btn" data-tab="tab-optics">Reset</button>
               </div>
             </div>
           </div>
@@ -258,6 +271,31 @@
                 <span class="val-display" id="val-godrays">0.00</span>
               </div>
             </div>
+
+            <!-- Tab Footer: Keyframe Loop & Storage -->
+            <div class="tab-bottom-section">
+              <div class="tab-keyframe-track" data-tab="tab-lighting">
+                <div class="keyframe-track-header">
+                  <div class="keyframe-track-title">
+                    <span class="track-tag">ANIMATION LOOP</span>
+                    <span class="keyframe-count-badge" id="kf-count-tab-lighting">0 Frames</span>
+                  </div>
+                  <div class="keyframe-track-controls">
+                    <button class="keyframe-play-btn" id="btn-play-tab-lighting" title="Play/Pause tab animation loop">▶ Loop</button>
+                    <button class="keyframe-add-btn" id="btn-add-tab-lighting" title="Capture current state into keyframe">+ Keyframe</button>
+                  </div>
+                </div>
+                <div class="keyframe-strip" id="kf-strip-tab-lighting"></div>
+              </div>
+
+              <div class="tab-storage-actions">
+                <button class="studio-btn-action save-defaults-btn" data-tab="tab-lighting">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                  <span>Save Defaults</span>
+                </button>
+                <button class="studio-btn-subtle reset-defaults-btn" data-tab="tab-lighting">Reset</button>
+              </div>
+            </div>
           </div>
 
           <!-- Fractal Math Parameters Tab -->
@@ -273,42 +311,29 @@
             <div class="control-section" id="dynamic-formula-controls">
               <!-- Dynamically populated based on active formula -->
             </div>
-          </div>
 
-          <!-- 6DOF Flight Sim Tab -->
-          <div class="tab-pane" id="tab-flight">
-            <div class="control-section">
-              <span class="section-tag">AVIONICS TELEMETRY</span>
-              <h3>Cockpit Flight Dynamics</h3>
-              <div class="flight-key-grid">
-                <div class="key-card"><span>W / S</span> Pitch / Throttle</div>
-                <div class="key-card"><span>A / D</span> Yaw / Strafe</div>
-                <div class="key-card"><span>Q / E</span> Roll Axis</div>
-                <div class="key-card"><span>R / F</span> Vertical Lift</div>
-                <div class="key-card"><span>Space</span> Boost Thruster</div>
-                <div class="key-card"><span>Shift</span> Airbrake</div>
+            <!-- Tab Footer: Keyframe Loop & Storage -->
+            <div class="tab-bottom-section">
+              <div class="tab-keyframe-track" data-tab="tab-params">
+                <div class="keyframe-track-header">
+                  <div class="keyframe-track-title">
+                    <span class="track-tag">ANIMATION LOOP</span>
+                    <span class="keyframe-count-badge" id="kf-count-tab-params">0 Frames</span>
+                  </div>
+                  <div class="keyframe-track-controls">
+                    <button class="keyframe-play-btn" id="btn-play-tab-params" title="Play/Pause tab animation loop">▶ Loop</button>
+                    <button class="keyframe-add-btn" id="btn-add-tab-params" title="Capture current state into keyframe">+ Keyframe</button>
+                  </div>
+                </div>
+                <div class="keyframe-strip" id="kf-strip-tab-params"></div>
               </div>
-              <div class="control-row" style="margin-top: 1rem;">
-                <label>Cruise Velocity</label>
-                <input type="range" id="param-flight-speed" min="0.1" max="2.0" step="0.05" value="0.6">
-                <span class="val-display" id="val-flight-speed">0.60</span>
-              </div>
-              <div class="control-row">
-                <label>Flight Headlamp (6DOF Only)</label>
-                <input type="checkbox" id="param-headlamp" checked class="studio-checkbox">
-              </div>
-              <div class="control-row">
-                <label>Headlamp Intensity</label>
-                <input type="range" id="param-headlamp-intensity" min="0.2" max="3.0" step="0.1" value="1.5">
-                <span class="val-display" id="val-headlamp-intensity">1.50</span>
-              </div>
-              <div class="control-row">
-                <label>Adaptive Proximity Scaling</label>
-                <input type="checkbox" id="param-adaptive-speed" checked class="studio-checkbox">
-              </div>
-              <div class="control-row">
-                <label>Collision Repulsion Cushion</label>
-                <input type="checkbox" id="param-wall-cushion" checked class="studio-checkbox">
+
+              <div class="tab-storage-actions">
+                <button class="studio-btn-action save-defaults-btn" data-tab="tab-params">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                  <span>Save Formula Defaults</span>
+                </button>
+                <button class="studio-btn-subtle reset-defaults-btn" data-tab="tab-params">Reset</button>
               </div>
             </div>
           </div>

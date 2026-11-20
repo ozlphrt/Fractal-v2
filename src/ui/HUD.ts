@@ -1,8 +1,9 @@
 // src/ui/HUD.ts
-// Industrial Studio HUD coordinator: quick-select popovers, precision sliders, formula archives, and 6DOF mode toggles
+// Industrial Studio HUD coordinator: quick-select popovers, precision sliders, tab defaults storage, and keyframe loops
 
 import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
 import { FORMULAS, FORMULA_CYCLE_ORDER, FORMULA_GROUPS, PALETTES } from '../formulas/registry.ts';
+import { CameraSnapshot, KeyframeEngine } from '../animation/KeyframeEngine.ts';
 
 export class HUD {
   public settings: RenderSettings;
@@ -10,12 +11,17 @@ export class HUD {
   public activePaletteIndex: number = 0;
   public currentMode: 'orbit' | 'flight' = 'orbit';
 
+  public keyframeEngine: KeyframeEngine = new KeyframeEngine();
+
   public onSettingChange?: () => void;
   public onFormulaChange?: (formula: FormulaDefinition) => void;
   public onPaletteChange?: (palette: PalettePreset) => void;
   public onModeChange?: (mode: 'orbit' | 'flight') => void;
   public onResetView?: () => void;
   public onToggleAccumulation?: (enabled: boolean) => void;
+
+  public getCameraSnapshot?: () => CameraSnapshot;
+  public onApplyKeyframeCamera?: (camera: CameraSnapshot) => void;
 
   private formulaList: FormulaDefinition[] = FORMULA_CYCLE_ORDER.map(id => FORMULAS[id]).filter(Boolean);
 
@@ -54,7 +60,11 @@ export class HUD {
       progressiveAccumulation: false
     };
 
+    // Load any saved defaults from localStorage
+    this.loadAllDefaults();
+
     this.initDOM();
+    this.initKeyframeEngine();
   }
 
   public getActiveFormula(): FormulaDefinition {
@@ -102,6 +112,7 @@ export class HUD {
       }
 
       this.updatePopoverActiveStates();
+      this.refreshAllKeyframeTracks();
     };
 
     // Populate Grouped Formula Dropdown in settings drawer
@@ -180,7 +191,6 @@ export class HUD {
       drawer.classList.toggle('closed');
       const isOpen = !drawer.classList.contains('closed');
       btnToggleSettings.setAttribute('aria-pressed', String(isOpen));
-      // Close popovers if drawer opened
       if (isOpen) {
         this.closeAllPopovers();
       }
@@ -200,6 +210,7 @@ export class HUD {
         const targetId = btn.dataset.tab!;
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
         document.getElementById(targetId)?.classList.add('active');
+        this.refreshAllKeyframeTracks();
       });
     });
 
@@ -246,8 +257,245 @@ export class HUD {
       this.onSettingChange?.();
     });
 
+    // Wire Save / Reset Defaults buttons for each tab
+    document.querySelectorAll<HTMLButtonElement>('.save-defaults-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.dataset.tab!;
+        this.saveTabDefaults(tabId, btn);
+      });
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('.reset-defaults-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.dataset.tab!;
+        this.resetTabDefaults(tabId);
+      });
+    });
+
+    // Wire Keyframe Add & Play buttons for each tab
+    const tabIds = ['tab-optics', 'tab-lighting', 'tab-params', 'tab-flight'];
+    for (const tabId of tabIds) {
+      const addBtn = document.getElementById(`btn-add-${tabId}`);
+      addBtn?.addEventListener('click', () => {
+        const f = this.getActiveFormula();
+        const fallbackCam: CameraSnapshot = { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
+        const cam = this.getCameraSnapshot ? this.getCameraSnapshot() : fallbackCam;
+        const vals = this.getTabValues(tabId);
+        this.keyframeEngine.addKeyframe(f.id, tabId, cam, vals);
+      });
+
+      const playBtn = document.getElementById(`btn-play-${tabId}`);
+      playBtn?.addEventListener('click', () => {
+        const f = this.getActiveFormula();
+        this.keyframeEngine.togglePlay(f.id, tabId);
+        this.refreshAllKeyframeTracks();
+      });
+    }
+
     updateDisplays();
     this.populateFormulaParams();
+    this.refreshAllKeyframeTracks();
+  }
+
+  private initKeyframeEngine() {
+    this.keyframeEngine.onTrackChange = () => {
+      this.refreshAllKeyframeTracks();
+    };
+
+    this.keyframeEngine.onApplyState = (camera, values, tabId) => {
+      this.onApplyKeyframeCamera?.(camera);
+      this.applyTabValues(tabId, values);
+      this.onSettingChange?.();
+    };
+  }
+
+  public refreshAllKeyframeTracks() {
+    const f = this.getActiveFormula();
+    const tabIds = ['tab-optics', 'tab-lighting', 'tab-params', 'tab-flight'];
+
+    for (const tabId of tabIds) {
+      const frames = this.keyframeEngine.getFramesFor(f.id, tabId);
+      const countEl = document.getElementById(`kf-count-${tabId}`);
+      if (countEl) {
+        countEl.textContent = `${frames.length} Frame${frames.length === 1 ? '' : 's'}`;
+      }
+
+      const playBtn = document.getElementById(`btn-play-${tabId}`) as HTMLButtonElement;
+      if (playBtn) {
+        const isPlayingThis = this.keyframeEngine.isPlaying && this.keyframeEngine.playingTabId === tabId && this.keyframeEngine.playingFormulaId === f.id;
+        playBtn.disabled = frames.length < 2;
+        playBtn.textContent = isPlayingThis ? '⏸ Pause' : '▶ Loop';
+        playBtn.classList.toggle('active', isPlayingThis);
+      }
+
+      const strip = document.getElementById(`kf-strip-${tabId}`);
+      if (strip) {
+        strip.innerHTML = '';
+        frames.forEach((kf, idx) => {
+          const chip = document.createElement('div');
+          chip.className = 'keyframe-chip';
+          chip.innerHTML = `
+            <span class="kf-chip-label" title="Jump to Keyframe #${idx + 1}">#${idx + 1}</span>
+            <button class="kf-chip-del" title="Delete Keyframe">✕</button>
+          `;
+
+          chip.querySelector('.kf-chip-label')!.addEventListener('click', () => {
+            this.onApplyKeyframeCamera?.(kf.camera);
+            this.applyTabValues(tabId, kf.values);
+            this.onSettingChange?.();
+          });
+
+          chip.querySelector('.kf-chip-del')!.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.keyframeEngine.removeKeyframe(kf.id);
+          });
+
+          strip.appendChild(chip);
+        });
+      }
+    }
+  }
+
+  public getTabValues(tabId: string): Record<string, number> {
+    if (tabId === 'tab-optics') {
+      return {
+        focalDistance: this.settings.focalDistance,
+        aperture: this.settings.aperture,
+        ior: this.settings.ior,
+        dispersion: this.settings.dispersion,
+        subsurface: this.settings.subsurface,
+        emissiveVeins: this.settings.emissiveVeins,
+        bloomIntensity: this.settings.bloomIntensity,
+        exposure: this.settings.exposure
+      };
+    } else if (tabId === 'tab-lighting') {
+      return {
+        sunIntensity: this.settings.sunIntensity,
+        rimIntensity: this.settings.rimIntensity,
+        rimElevation: this.settings.rimElevation,
+        fillIntensity: this.settings.fillIntensity,
+        glowIntensity: this.settings.glowIntensity,
+        lightAzimuth: this.settings.lightAzimuth,
+        lightElevation: this.settings.lightElevation,
+        fogDensity: this.settings.fogDensity,
+        godraysIntensity: this.settings.godraysIntensity
+      };
+    } else if (tabId === 'tab-params') {
+      return this.getDynamicParams();
+    } else if (tabId === 'tab-flight') {
+      return {
+        flightSpeed: this.settings.flightSpeed,
+        headlampIntensity: this.settings.headlampIntensity,
+        headlamp: this.settings.headlamp ? 1 : 0,
+        adaptiveSpeed: this.settings.adaptiveSpeed ? 1 : 0,
+        wallCushion: this.settings.wallCushion ? 1 : 0
+      };
+    }
+    return {};
+  }
+
+  public applyTabValues(tabId: string, values: Record<string, number>) {
+    if (tabId === 'tab-optics') {
+      if (values.focalDistance !== undefined) this.setRangeValue('param-focal-dist', 'val-focal-dist', this.settings.focalDistance = values.focalDistance);
+      if (values.aperture !== undefined) this.setRangeValue('param-aperture', 'val-aperture', this.settings.aperture = values.aperture);
+      if (values.ior !== undefined) this.setRangeValue('param-ior', 'val-ior', this.settings.ior = values.ior);
+      if (values.dispersion !== undefined) this.setRangeValue('param-dispersion', 'val-dispersion', this.settings.dispersion = values.dispersion);
+      if (values.subsurface !== undefined) this.setRangeValue('param-sss', 'val-sss', this.settings.subsurface = values.subsurface);
+      if (values.emissiveVeins !== undefined) this.setRangeValue('param-emissive', 'val-emissive', this.settings.emissiveVeins = values.emissiveVeins);
+      if (values.bloomIntensity !== undefined) this.setRangeValue('param-bloom', 'val-bloom', this.settings.bloomIntensity = values.bloomIntensity);
+      if (values.exposure !== undefined) this.setRangeValue('param-exposure', 'val-exposure', this.settings.exposure = values.exposure);
+    } else if (tabId === 'tab-lighting') {
+      if (values.sunIntensity !== undefined) this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity = values.sunIntensity);
+      if (values.rimIntensity !== undefined) this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity = values.rimIntensity);
+      if (values.rimElevation !== undefined) this.setRangeValue('param-rim-elevation', 'val-rim-elevation', this.settings.rimElevation = values.rimElevation, '°');
+      if (values.fillIntensity !== undefined) this.setRangeValue('param-fill-intensity', 'val-fill-intensity', this.settings.fillIntensity = values.fillIntensity);
+      if (values.glowIntensity !== undefined) this.setRangeValue('param-glow-intensity', 'val-glow-intensity', this.settings.glowIntensity = values.glowIntensity);
+      if (values.lightAzimuth !== undefined) this.setRangeValue('param-light-azimuth', 'val-light-azimuth', this.settings.lightAzimuth = values.lightAzimuth, '°');
+      if (values.lightElevation !== undefined) this.setRangeValue('param-light-elevation', 'val-light-elevation', this.settings.lightElevation = values.lightElevation, '°');
+      if (values.fogDensity !== undefined) this.setRangeValue('param-fog', 'val-fog', this.settings.fogDensity = values.fogDensity);
+      if (values.godraysIntensity !== undefined) this.setRangeValue('param-godrays', 'val-godrays', this.settings.godraysIntensity = values.godraysIntensity);
+    } else if (tabId === 'tab-params') {
+      for (const [key, val] of Object.entries(values)) {
+        const input = document.getElementById(`dyn-param-${key}`) as HTMLInputElement;
+        const disp = document.getElementById(`dyn-val-${key}`);
+        if (input) input.value = String(val);
+        if (disp) disp.textContent = val.toFixed(2);
+      }
+    } else if (tabId === 'tab-flight') {
+      if (values.flightSpeed !== undefined) this.setRangeValue('param-flight-speed', 'val-flight-speed', this.settings.flightSpeed = values.flightSpeed);
+      if (values.headlampIntensity !== undefined) this.setRangeValue('param-headlamp-intensity', 'val-headlamp-intensity', this.settings.headlampIntensity = values.headlampIntensity);
+      if (values.headlamp !== undefined) {
+        const el = document.getElementById('param-headlamp') as HTMLInputElement;
+        if (el) el.checked = Boolean(values.headlamp);
+        this.settings.headlamp = Boolean(values.headlamp);
+      }
+    }
+  }
+
+  private setRangeValue(id: string, dispId: string, val: number, suffix = '') {
+    const el = document.getElementById(id) as HTMLInputElement;
+    const disp = document.getElementById(dispId);
+    if (el) el.value = String(val);
+    if (disp) disp.textContent = val.toFixed(2) + suffix;
+  }
+
+  public saveTabDefaults(tabId: string, btn?: HTMLButtonElement) {
+    const vals = this.getTabValues(tabId);
+    const key = tabId === 'tab-params'
+      ? `fractal_v2_defaults_formula_${this.getActiveFormula().id}`
+      : `fractal_v2_defaults_${tabId}`;
+
+    try {
+      localStorage.setItem(key, JSON.stringify(vals));
+      if (btn) {
+        const origText = btn.innerHTML;
+        btn.innerHTML = `<span>Saved ✓</span>`;
+        btn.classList.add('saved-active');
+        setTimeout(() => {
+          btn.innerHTML = origText;
+          btn.classList.remove('saved-active');
+        }, 1800);
+      }
+    } catch {
+      // Ignore quota errors
+    }
+  }
+
+  public resetTabDefaults(tabId: string) {
+    const key = tabId === 'tab-params'
+      ? `fractal_v2_defaults_formula_${this.getActiveFormula().id}`
+      : `fractal_v2_defaults_${tabId}`;
+
+    try {
+      localStorage.removeItem(key);
+      if (tabId === 'tab-optics') {
+        this.applyTabValues('tab-optics', { focalDistance: 2.35, aperture: 0.0, ior: 1.45, dispersion: 0.0, subsurface: 0.2, emissiveVeins: 0.0, bloomIntensity: 0.25, exposure: 1.0 });
+      } else if (tabId === 'tab-lighting') {
+        this.applyTabValues('tab-lighting', { sunIntensity: 1.0, rimIntensity: 0.32, rimElevation: 30, fillIntensity: 0.38, glowIntensity: 0.35, lightAzimuth: 45, lightElevation: 48, fogDensity: 0.03, godraysIntensity: 0.0 });
+      } else if (tabId === 'tab-params') {
+        this.populateFormulaParams();
+      } else if (tabId === 'tab-flight') {
+        this.applyTabValues('tab-flight', { flightSpeed: 0.6, headlampIntensity: 1.5, headlamp: 1, adaptiveSpeed: 1, wallCushion: 1 });
+      }
+      this.onSettingChange?.();
+    } catch {
+      // Ignore
+    }
+  }
+
+  private loadAllDefaults() {
+    try {
+      const optics = localStorage.getItem('fractal_v2_defaults_tab-optics');
+      if (optics) Object.assign(this.settings, JSON.parse(optics));
+
+      const lighting = localStorage.getItem('fractal_v2_defaults_tab-lighting');
+      if (lighting) Object.assign(this.settings, JSON.parse(lighting));
+
+      const flight = localStorage.getItem('fractal_v2_defaults_tab-flight');
+      if (flight) Object.assign(this.settings, JSON.parse(flight));
+    } catch {
+      // Ignore
+    }
   }
 
   private setupPopovers() {
@@ -391,13 +639,11 @@ export class HUD {
   }
 
   private updatePopoverActiveStates() {
-    // Highlight active formula card
     const currentId = this.getActiveFormula().id;
     document.querySelectorAll<HTMLElement>('.formula-card').forEach(card => {
       card.classList.toggle('active', card.dataset.formulaId === currentId);
     });
 
-    // Highlight active palette card
     document.querySelectorAll<HTMLElement>('.palette-card').forEach(card => {
       card.classList.toggle('active', card.dataset.paletteIndex === String(this.activePaletteIndex));
     });
@@ -418,6 +664,7 @@ export class HUD {
 
     this.updatePopoverActiveStates();
     this.populateFormulaParams();
+    this.refreshAllKeyframeTracks();
     this.onFormulaChange?.(f);
   }
 
@@ -452,13 +699,23 @@ export class HUD {
     const formula = this.getActiveFormula();
     container.innerHTML = `<h3>${this.activeFormulaIndex + 1}. ${formula.name} Parameters</h3>`;
 
+    // Check for saved formula defaults
+    let savedFormulaValues: Record<string, number> = {};
+    try {
+      const saved = localStorage.getItem(`fractal_v2_defaults_formula_${formula.id}`);
+      if (saved) savedFormulaValues = JSON.parse(saved);
+    } catch {
+      // Ignore
+    }
+
     for (const p of formula.params) {
+      const currentVal = savedFormulaValues[p.id] ?? p.default;
       const row = document.createElement('div');
       row.className = 'control-row';
       row.innerHTML = `
         <label>${p.name}</label>
-        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}" id="dyn-param-${p.id}" class="studio-slider">
-        <span class="val-display" id="dyn-val-${p.id}">${p.default.toFixed(2)}</span>
+        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${currentVal}" id="dyn-param-${p.id}" class="studio-slider">
+        <span class="val-display" id="dyn-val-${p.id}">${currentVal.toFixed(2)}</span>
       `;
       container.appendChild(row);
 
