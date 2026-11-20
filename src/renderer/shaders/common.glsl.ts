@@ -65,7 +65,7 @@ float noise3D(vec3 p) {
     return mix(y0, y1, u.z);
 }
 
-// 4-octave Fractional Brownian Motion for cosmic nebulae and dark dust rifts
+// 3-octave Fractional Brownian Motion for cosmic nebulae and dark dust rifts
 float fbm3D(vec3 p) {
     float v = 0.0;
     float a = 0.5;
@@ -74,7 +74,7 @@ float fbm3D(vec3 p) {
        -0.80,  0.36, -0.48,
        -0.60, -0.48,  0.64
     );
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         v += a * noise3D(p);
         p = rot * p * 2.02;
         a *= 0.5;

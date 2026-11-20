@@ -33,6 +33,10 @@ export class Raymarcher {
   private lastFormula: FormulaDefinition | null = null;
   private lastParams: Record<string, number> = {};
 
+  // High-performance dynamic internal resolution
+  public renderWidth: number = 0;
+  public renderHeight: number = 0;
+
   // Compiled shader programs cache
   private programs: Map<string, WebGLProgram> = new Map();
   // Programs whose compile/link was kicked off (possibly asynchronously) but not yet verified
@@ -95,9 +99,19 @@ export class Raymarcher {
     const width = this.canvas.clientWidth || window.innerWidth;
     const height = this.canvas.clientHeight || window.innerHeight;
 
-    if (this.canvas.width !== width || this.canvas.height !== height) {
+    // High-performance dynamic internal resolution scaling:
+    // Caps excessive raymarch pixel loads on 1440p/4K monitors to preserve solid 60 FPS
+    // while delivering crisp visuals with GPU hardware linear interpolation + ACES tonemapping
+    const maxDim = 1440;
+    const scale = Math.min(1.0, maxDim / Math.max(width, height));
+    const rw = Math.max(320, Math.round(width * scale));
+    const rh = Math.max(240, Math.round(height * scale));
+
+    if (this.canvas.width !== width || this.canvas.height !== height || this.renderWidth !== rw || this.renderHeight !== rh) {
       this.canvas.width = width;
       this.canvas.height = height;
+      this.renderWidth = rw;
+      this.renderHeight = rh;
 
       if (this.rawTexture) {
         gl.deleteTexture(this.rawTexture);
@@ -114,9 +128,9 @@ export class Raymarcher {
 
       this.rawTexture = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, this.rawTexture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, type, null);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, rw, rh, 0, gl.RGBA, type, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
@@ -126,7 +140,7 @@ export class Raymarcher {
 
       this.transitionTexture = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, this.transitionTexture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, type, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, rw, rh, 0, gl.RGBA, type, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -136,7 +150,7 @@ export class Raymarcher {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.transitionFBO);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.transitionTexture, 0);
 
-      this.accumulator.resize(width, height);
+      this.accumulator.resize(rw, rh);
     }
   }
 
@@ -244,10 +258,10 @@ export class Raymarcher {
 
     if (this.prevFormula && this.prevProgram && this.transitionFBO) {
       this.drawScene(this.transitionFBO, this.prevProgram, this.prevFormula, this.prevParams, palette, settings,
-        camPos, camTarget, camUp, time, isFlightMode, screenOffset);
+        camPos, camTarget, camUp, time, isFlightMode, screenOffset, 75);
     }
     this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
-      camPos, camTarget, camUp, time, isFlightMode, screenOffset);
+      camPos, camTarget, camUp, time, isFlightMode, screenOffset, 135);
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;
@@ -282,14 +296,15 @@ export class Raymarcher {
     camUp: Vec3,
     time: number,
     isFlightMode: boolean,
-    screenOffset: [number, number]
+    screenOffset: [number, number],
+    maxSteps: number = 135
   ) {
     const gl = this.gl;
     gl.useProgram(prog);
 
-    // Render into the given target
+    // Render into the given target with internal scaled resolution
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.viewport(0, 0, this.renderWidth, this.renderHeight);
 
     // Uniforms setup
     const set1f = (name: string, val: number) => {
@@ -313,9 +328,12 @@ export class Raymarcher {
     set3f('u_camPos', camPos.x, camPos.y, camPos.z);
     set3f('u_camTarget', camTarget.x, camTarget.y, camTarget.z);
     set3f('u_camUp', camUp.x, camUp.y, camUp.z);
-    set2f('u_resolution', this.canvas.width, this.canvas.height);
-    set2f('u_screenOffset', screenOffset[0], screenOffset[1]);
+    set2f('u_resolution', this.renderWidth, this.renderHeight);
+    const scaleX = this.renderWidth / Math.max(1, this.canvas.width);
+    const scaleY = this.renderHeight / Math.max(1, this.canvas.height);
+    set2f('u_screenOffset', screenOffset[0] * scaleX, screenOffset[1] * scaleY);
     set1f('u_time', time);
+    set1i('u_maxSteps', maxSteps);
 
     // Halton subpixel jitter & lens bokeh jitter
     const sampleIdx = settings.progressiveAccumulation ? this.accumulator.sampleCount + 1 : 1;

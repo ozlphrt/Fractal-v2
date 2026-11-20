@@ -393,6 +393,50 @@ export class HUD {
     this.updateGlyphs();
     this.populateFormulaParams();
     this.refreshGlobalKeyframeTrack();
+    this.setupAutoHide();
+  }
+
+  private autoHideTimer: number | null = null;
+  private isHudFaded: boolean = false;
+
+  private setupAutoHide() {
+    const hudContainer = document.getElementById('hud-container');
+    if (!hudContainer) return;
+
+    const wakeHUD = () => {
+      if (this.isHudFaded) {
+        this.isHudFaded = false;
+        hudContainer.classList.remove('hud-faded');
+      }
+      this.resetAutoHideTimer();
+    };
+
+    // Listen to user touches, pointer interactions, clicks, keyboard navigation, and mouse motion
+    window.addEventListener('touchstart', wakeHUD, { passive: true });
+    window.addEventListener('touchmove', wakeHUD, { passive: true });
+    window.addEventListener('pointerdown', wakeHUD, { passive: true });
+    window.addEventListener('pointermove', wakeHUD, { passive: true });
+    window.addEventListener('keydown', wakeHUD, { passive: true });
+    window.addEventListener('wheel', wakeHUD, { passive: true });
+
+    this.resetAutoHideTimer();
+  }
+
+  public resetAutoHideTimer() {
+    if (this.autoHideTimer !== null) {
+      window.clearTimeout(this.autoHideTimer);
+    }
+    // Auto-hide all onscreen HUD elements after 3.5 seconds of inactivity
+    this.autoHideTimer = window.setTimeout(() => {
+      const drawer = document.getElementById('settings-drawer');
+      const drawerOpen = drawer && !drawer.classList.contains('closed');
+      const popoverOpen = document.querySelector('.studio-popover:not(.closed)');
+      // Do not hide if user has an active menu, drawer, or popover open
+      if (!drawerOpen && !popoverOpen) {
+        this.isHudFaded = true;
+        document.getElementById('hud-container')?.classList.add('hud-faded');
+      }
+    }, 3500);
   }
 
   public updateActiveGlobalKeyframe(triggerBtn?: HTMLElement | null) {

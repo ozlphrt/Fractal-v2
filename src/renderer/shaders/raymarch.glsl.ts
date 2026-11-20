@@ -98,7 +98,7 @@ float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     float ph = 1e10;
     float t = mint;
     vec4 trap;
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 10; i++) {
         if (t >= maxt) break;
         float h = mapFractal(ro + rd * t, trap);
         if (h < 0.0005) return 0.0;
@@ -107,7 +107,7 @@ float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
         res = min(res, k * d / max(0.0, t - y));
         ph = h;
         if (res < 0.02) return 0.0; // Early exit when already in deep shadow
-        t += clamp(h * 0.85, 0.02, 0.35);
+        t += clamp(h * 0.92, 0.03, 0.45);
     }
     return clamp(res, 0.0, 1.0);
 }
@@ -119,12 +119,12 @@ float calcAO(vec3 pos, vec3 nor, vec2 jitter) {
     vec4 trap;
     float randOffset = fract(sin(dot(pos.xy + jitter, vec2(12.9898, 78.233))) * 43758.5453);
     for (int i = 0; i < 4; i++) {
-        float h = 0.02 + (0.10 + 0.025 * randOffset) * float(i);
+        float h = 0.025 + (0.11 + 0.025 * randOffset) * float(i);
         float d = mapFractal(pos + h * nor, trap);
         occ += max(0.0, h - d) * sca;
-        sca *= 0.72;
+        sca *= 0.70;
     }
-    return clamp(1.0 - 1.8 * occ, 0.0, 1.0);
+    return clamp(1.0 - 1.6 * occ, 0.0, 1.0);
 }
 
 // Primary Raymarcher
@@ -188,7 +188,7 @@ void main() {
             finalTrap = trap;
             break;
         }
-        t += max(hitThresh * 0.35, d * 0.72);
+        t += max(hitThresh * 0.35, d * 0.86);
     }
 
     vec3 sceneColor = vec3(0.0);
@@ -210,7 +210,7 @@ void main() {
         float spec = pow(clamp(dot(nor, halfVec), 0.0, 1.0), 24.0);
 
         // Soft Shadows & AO
-        float shadow = (diff > 0.005) ? calcShadow(hitPos + nor * max(0.012, normEps * 3.0), u_lightDir, 0.025, 4.0, 12.0) : 0.0;
+        float shadow = (diff > 0.015) ? calcShadow(hitPos + nor * max(0.012, normEps * 3.0), u_lightDir, 0.025, 4.0, 12.0) : 0.0;
         float ao = calcAO(hitPos, nor, u_jitter);
 
         // Natural rock crevice weathering
@@ -260,10 +260,12 @@ void main() {
             sceneColor += albedo * vein * u_emissiveVeins * 0.3;
         }
 
-        // Distance fog smoothly dissolving into deep space background
+        // Distance fog smoothly dissolving into deep space background (evaluated only near horizon for massive FPS gain)
         float fogFactor = 1.0 - exp(-t * u_fogDensity);
-        vec3 spaceBackdrop = renderSpaceBackground(rayDir, u_lightDir, u_time);
-        sceneColor = mix(sceneColor, spaceBackdrop * 0.45, fogFactor);
+        if (fogFactor > 0.04) {
+            vec3 spaceBackdrop = renderSpaceBackground(rayDir, u_lightDir, u_time);
+            sceneColor = mix(sceneColor, spaceBackdrop * 0.45, fogFactor);
+        }
 
     } else {
         // Photorealistic celestial background: Realistic stars, Milky Way & Passing comets
