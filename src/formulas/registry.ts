@@ -1,11 +1,12 @@
 // src/formulas/registry.ts
-// Catalog of all 20 fractal formulas grouped into mathematical families with numbering
+// Catalog of all 35 fractal formulas grouped into 12 mathematical families with numbering
 // 100% natural, geological, mineral, and organic materials (rocks, sands, soils, moss, clays, slates)
 
 import { FormulaDefinition, PalettePreset } from '../core/types.ts';
 import { FORMULAS as RAW_FORMULAS, FORMULA_IDS } from './formulas-raw.ts';
+import { NEW_FORMULAS, NEW_FORMULA_IDS } from './new-formulas.ts';
 
-export { FORMULA_IDS };
+export { FORMULA_IDS, NEW_FORMULA_IDS };
 
 export const PALETTES: PalettePreset[] = [
   {
@@ -107,18 +108,43 @@ export const FORMULA_GROUPS: FormulaGroup[] = [
     name: 'Non-Analytic & Helical Folds',
     badge: 'ABS',
     ids: ['burning_ship', 'wind_ship', 'helix_bulb']
+  },
+  {
+    name: 'Mandelbox & Tglad Folds',
+    badge: 'MBOX',
+    ids: ['mandelbox', 'amazing_surf', 'rot_mandelbox']
+  },
+  {
+    name: 'Triply Periodic Minimal Surfaces',
+    badge: 'TPMS',
+    ids: ['schoen_gyroid', 'schwarz_p', 'neovius']
+  },
+  {
+    name: 'Hyperbolic & Coxeter Honeycombs',
+    badge: 'COX',
+    ids: ['poincare_dodec', 'coxeter_octa', 'klein_torus']
+  },
+  {
+    name: 'Clifford & Hopf Fibrations',
+    badge: 'HOPF',
+    ids: ['hopf_rings', 'villarceau_torus', 'clifford_manifold']
+  },
+  {
+    name: 'Biomorphs & Bicomplex Dendrites',
+    badge: 'BIO',
+    ids: ['pickover_biomorph', 'bicomplex_dendrite', 'coral_nautilus']
   }
 ];
 
 // Ordered list of formula IDs grouped logically
 export const FORMULA_CYCLE_ORDER: string[] = FORMULA_GROUPS.flatMap(g => g.ids);
 
-// Build typed definitions for all 20 formulas
+// Build typed definitions for all 35 formulas
 export const FORMULAS: Record<string, FormulaDefinition> = {};
 
 for (const id of FORMULA_CYCLE_ORDER) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = (RAW_FORMULAS as Record<string, any>)[id];
+  const raw = (RAW_FORMULAS as Record<string, any>)[id] || (NEW_FORMULAS as Record<string, any>)[id];
   if (raw) {
     FORMULAS[id] = {
       id: raw.id,

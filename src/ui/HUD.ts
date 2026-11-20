@@ -40,6 +40,7 @@ export class HUD {
 
   public getCameraSnapshot?: () => CameraSnapshot;
   public onApplyKeyframeCamera?: (camera: CameraSnapshot) => void;
+  public onTransitionProgress?: (weight: number, isDone: boolean) => void;
 
   private formulaList: FormulaDefinition[] = FORMULA_CYCLE_ORDER.map(id => FORMULAS[id]).filter(Boolean);
   private randomDeck: number[] = [];
@@ -264,22 +265,7 @@ export class HUD {
     // Populate Formula dropdown in Parameters tab
     const formulaDropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement | null;
     if (formulaDropdown) {
-      formulaDropdown.innerHTML = '';
-      for (const group of FORMULA_GROUPS) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = group.name;
-        for (const id of group.ids) {
-          const f = FORMULAS[id];
-          if (!f) continue;
-          const idx = this.formulaList.findIndex(item => item.id === id);
-          const opt = document.createElement('option');
-          opt.value = id;
-          opt.textContent = `${idx + 1}. ${f.name}`;
-          optgroup.appendChild(opt);
-        }
-        formulaDropdown.appendChild(optgroup);
-      }
-      formulaDropdown.value = this.getActiveFormula().id;
+      this.syncFormulaDropdown();
       formulaDropdown.addEventListener('change', () => {
         const idx = this.formulaList.findIndex(item => item.id === formulaDropdown.value);
         if (idx >= 0) {
@@ -620,6 +606,10 @@ export class HUD {
 
   /** Called when the user drags / pinches / scrolls the camera: hand control back by pausing playback */
   public pauseTourOnInteract() {
+    if (this.isRandomMode) {
+      // In Random Mode, user zoom/pan/rotate is preserved live while the flythrough continues!
+      return;
+    }
     if (this.tourActive || this.keyframeEngine.isPlaying) this.stopTour();
   }
 
@@ -1362,10 +1352,7 @@ export class HUD {
       labelFormula.textContent = `${this.activeFormulaIndex + 1}. ${f.name}`;
     }
 
-    const dropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement;
-    if (dropdown && dropdown.value !== f.id) {
-      dropdown.value = f.id;
-    }
+    this.syncFormulaDropdown();
 
     this.updatePopoverActiveStates();
     this.selectedKeyframeId = null;
@@ -1429,8 +1416,13 @@ export class HUD {
     const step = (now: number) => {
       const elapsedSec = (now - startTime) / 1000.0;
       const rawT = Math.min(1.0, elapsedSec / durationSec);
-      // Silky cosine ease for zero initial and final velocity without sluggishness
-      const t = 0.5 * (1.0 - Math.cos(Math.PI * rawT));
+      // Momentum-preserving ease: keeps positive forward velocity (0.35 * cruise speed) at boundaries
+      // so the camera never hits a sudden dead stop or abruptly lurches forward
+      const cosineEase = 0.5 * (1.0 - Math.cos(Math.PI * rawT));
+      const t = 0.35 * rawT + 0.65 * cosineEase;
+
+      // Lockstep shader crossfade blending synchronized to camera flight
+      this.onTransitionProgress?.(Math.max(0.0, 1.0 - rawT), rawT >= 1.0);
 
       // 1. Direct 3D Euclidean camera interpolation: straight, silky glide from start to target pose
       // Eliminates orbital swings and lateral jumps at the onset of transitions
@@ -1549,7 +1541,34 @@ export class HUD {
     }, { passive: false });
   }
 
+  public syncFormulaDropdown() {
+    const formulaDropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement | null;
+    if (!formulaDropdown) return;
+    if (formulaDropdown.options.length === 0) {
+      formulaDropdown.innerHTML = '';
+      for (const group of FORMULA_GROUPS) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group.name;
+        for (const id of group.ids) {
+          const f = FORMULAS[id];
+          if (!f) continue;
+          const idx = this.formulaList.findIndex(item => item.id === id);
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = `${idx + 1}. ${f.name}`;
+          optgroup.appendChild(opt);
+        }
+        formulaDropdown.appendChild(optgroup);
+      }
+    }
+    const currentId = this.getActiveFormula().id;
+    if (formulaDropdown.value !== currentId) {
+      formulaDropdown.value = currentId;
+    }
+  }
+
   public populateFormulaParams() {
+    this.syncFormulaDropdown();
     const container = document.getElementById('dynamic-formula-controls');
     if (!container) return;
     const formula = this.getActiveFormula();

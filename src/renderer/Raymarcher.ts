@@ -20,18 +20,26 @@ export class Raymarcher {
   private rawTexture: WebGLTexture | null = null;
   private transitionFBO: WebGLFramebuffer | null = null;
   private transitionTexture: WebGLTexture | null = null;
-  private transitionWeight: number = 0.0;
+  public transitionWeight: number = 0.0;
   private hasRenderedAtLeastOnce: boolean = false;
 
   // Live formula cross-fade: the outgoing formula keeps rendering (with its own params) while it dissolves
   /** Duration in seconds of the next formula cross-fade (aligned with 6.5s in-formula pacing) */
   public crossfadeDuration: number = 6.5;
-  private transitionProgress: number = 1.0;
   private prevFormula: FormulaDefinition | null = null;
   private prevProgram: WebGLProgram | null = null;
   private prevParams: Record<string, number> = {};
   private lastFormula: FormulaDefinition | null = null;
   private lastParams: Record<string, number> = {};
+
+  public setTransitionState(weight: number, isDone: boolean) {
+    this.transitionWeight = Math.max(0.0, Math.min(1.0, weight));
+    if (isDone || weight <= 0.0001) {
+      this.prevFormula = null;
+      this.prevProgram = null;
+      this.transitionWeight = 0.0;
+    }
+  }
 
   // High-performance dynamic internal resolution
   public renderWidth: number = 0;
@@ -226,7 +234,7 @@ export class Raymarcher {
     time: number,
     isFlightMode: boolean = false,
     screenOffset: [number, number] = [0, 0],
-    dt: number = 0.016
+    _dt: number = 0.016
   ) {
     this.resize();
 
@@ -236,7 +244,6 @@ export class Raymarcher {
         this.prevFormula = this.lastFormula;
         this.prevProgram = this.currentProgram;
         this.prevParams = this.lastParams;
-        this.transitionProgress = 0.0;
         this.transitionWeight = 1.0;
       }
       this.currentFormulaId = formula.id;
@@ -246,23 +253,14 @@ export class Raymarcher {
     this.lastFormula = formula;
     this.lastParams = { ...formulaParams };
 
-    if (this.prevFormula && this.prevProgram) {
-      this.transitionProgress = Math.min(1.0, this.transitionProgress + dt / Math.max(0.05, this.crossfadeDuration));
-      this.transitionWeight = 1.0 - this.transitionProgress;
-      if (this.transitionProgress >= 1.0) {
-        this.prevFormula = null;
-        this.prevProgram = null;
-        this.transitionWeight = 0.0;
-      }
-    }
-
-    const transitionSteps = this.prevFormula ? 120 : 135;
-    if (this.prevFormula && this.prevProgram && this.transitionFBO) {
+    // Consistent 135 raymarching steps across both passes eliminates any geometry/depth pop
+    const maxSteps = 135;
+    if (this.prevFormula && this.prevProgram && this.transitionFBO && this.transitionWeight > 0.001) {
       this.drawScene(this.transitionFBO, this.prevProgram, this.prevFormula, this.prevParams, palette, settings,
-        camPos, camTarget, camUp, time, isFlightMode, screenOffset, transitionSteps);
+        camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps);
     }
     this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
-      camPos, camTarget, camUp, time, isFlightMode, screenOffset, transitionSteps);
+      camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps);
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;

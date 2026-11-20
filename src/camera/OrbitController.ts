@@ -59,6 +59,11 @@ export class OrbitController {
   public onChange?: () => void;
   /** Fired when the user actively drags / pinches / scrolls to move the camera */
   public onUserInteract?: () => void;
+  public hasUserInteracted = false;
+
+  public resetInteraction() {
+    this.hasUserInteracted = false;
+  }
 
   constructor(camera: Camera, canvas: HTMLCanvasElement) {
     this.camera = camera;
@@ -222,11 +227,14 @@ export class OrbitController {
         this.pinchDist = dist;
         this.pinchMidX = midX;
         this.pinchMidY = midY;
-        this.onUserInteract?.();
+        this.hasUserInteracted = true;
+        this.hasUserInteracted = true;
+      this.onUserInteract?.();
         this.onChange?.();
         return;
       }
       if (!this.isDragging) return;
+      this.hasUserInteracted = true;
       this.onUserInteract?.();
       const dx = e.clientX - this.lastMouseX;
       const dy = e.clientY - this.lastMouseY;
@@ -256,6 +264,7 @@ export class OrbitController {
     // Weighted optical-grade wheel zoom with smooth exponential glide
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
+      this.hasUserInteracted = true;
       this.onUserInteract?.();
       const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.canvas.clientHeight : 1);
       const clampedDelta = Math.max(-100, Math.min(100, pixels));

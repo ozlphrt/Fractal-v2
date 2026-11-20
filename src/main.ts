@@ -17,6 +17,7 @@ class App {
   private fps: number = 60.0;
   private currentOffsetX: number = 0;
   private currentOffsetY: number = 0;
+  private prevBaseCam: { pos: [number, number, number]; target: [number, number, number] } | null = null;
 
   constructor() {
     this.canvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
@@ -66,13 +67,39 @@ class App {
     };
 
     this.hud.onApplyKeyframeCamera = (camSnap) => {
-      this.camera.setView(camSnap.pos, camSnap.target);
-      this.camera.up.set(...camSnap.up);
-      this.orbitController.syncFromCamera();
+      if (this.hud.isRandomMode && this.orbitController.hasUserInteracted && this.prevBaseCam) {
+        // User has customized zoom, angle, or pan in Random Mode:
+        // Keep animation flowing by applying the flight motion delta to the user's camera!
+        const dx = camSnap.pos[0] - this.prevBaseCam.pos[0];
+        const dy = camSnap.pos[1] - this.prevBaseCam.pos[1];
+        const dz = camSnap.pos[2] - this.prevBaseCam.pos[2];
+
+        const dtx = camSnap.target[0] - this.prevBaseCam.target[0];
+        const dty = camSnap.target[1] - this.prevBaseCam.target[1];
+        const dtz = camSnap.target[2] - this.prevBaseCam.target[2];
+
+        this.camera.position.x += dx;
+        this.camera.position.y += dy;
+        this.camera.position.z += dz;
+
+        this.camera.target.x += dtx;
+        this.camera.target.y += dty;
+        this.camera.target.z += dtz;
+
+        this.camera.up.set(...camSnap.up);
+        this.orbitController.syncFromCamera();
+      } else {
+        this.camera.setView(camSnap.pos, camSnap.target);
+        this.camera.up.set(...camSnap.up);
+        this.orbitController.syncFromCamera();
+      }
+      this.prevBaseCam = { pos: [...camSnap.pos], target: [...camSnap.target] };
       invalidateAccum();
     };
 
     this.hud.onFormulaChange = (formula, fromTour) => {
+      this.orbitController.resetInteraction();
+      this.prevBaseCam = null;
       // Tour & Random mode: aligned with 6.5s in-formula pacing for an ultra-seamless, smooth, slow dissolve.
       // Manual switch: 2.5s for a graceful interactive dissolve.
       this.raymarcher.crossfadeDuration = fromTour ? 6.5 : 2.5;
@@ -91,6 +118,10 @@ class App {
       const formula = this.hud.getActiveFormula();
       this.orbitController.transitionTo(formula.defaultCam.pos, formula.defaultCam.target, [0, 1, 0], 0.75);
       invalidateAccum();
+    };
+
+    this.hud.onTransitionProgress = (weight, isDone) => {
+      this.raymarcher.setTransitionState(weight, isDone);
     };
 
     this.hud.onToggleAccumulation = () => {
