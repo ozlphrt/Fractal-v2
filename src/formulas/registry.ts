@@ -100,9 +100,9 @@ export const FORMULA_GROUPS: FormulaGroup[] = [
     ids: ['pseudo_kleinian', 'cathedral']
   },
   {
-    name: 'Cubic Lattices',
-    badge: 'CUB',
-    ids: ['jerusalem', 'twist_cube', 'vault_cube', 'menger']
+    name: 'Polyhedral Solids & Lattices',
+    badge: 'POL',
+    ids: ['menger', 'tetra', 'jerusalem', 'twist_cube', 'vault_cube']
   },
   {
     name: 'Hypercomplex 4D Julia',
@@ -110,9 +110,9 @@ export const FORMULA_GROUPS: FormulaGroup[] = [
     ids: ['quat_julia', 'ribbon_julia', 'quartz_julia']
   },
   {
-    name: 'Mandelbox, Kali & Origami Folds',
-    badge: 'FLD',
-    ids: ['kalibox', 'kifs', 'tetra']
+    name: 'Kaleidoscopic & Box Folds',
+    badge: 'KIF',
+    ids: ['kalibox', 'kifs']
   },
   {
     name: 'Apollonian Sphere Gaskets',
