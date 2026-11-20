@@ -128,7 +128,7 @@ void main() {
 
     // Primary raymarch traversal
     float t = 0.05;
-    float maxDist = 12.0;
+    float maxDist = 14.0;
     vec4 trap = vec4(100.0);
     vec4 finalTrap = vec4(0.0);
     bool hit = false;
@@ -136,7 +136,7 @@ void main() {
     float glow = 0.0;
     float godrays = 0.0;
 
-    for (int i = 0; i < 150; i++) {
+    for (int i = 0; i < 260; i++) {
         if (t > maxDist) break;
         vec3 currPos = rayOrigin + rayDir * t;
         float d = mapFractal(currPos, trap);
@@ -154,7 +154,7 @@ void main() {
             godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.0004 * u_godraysIntensity;
         }
 
-        float hitThresh = 0.0006 * (1.0 + t * 0.02);
+        float hitThresh = 0.0012 * (1.0 + t * 0.015);
         if (d < hitThresh) {
             t += d * 0.5;
             hit = true;
