@@ -2,7 +2,7 @@
 // Glassmorphism HUD coordinator: tabs, parameter inputs, and mode switching
 
 import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
-import { FORMULAS, PALETTES } from '../formulas/registry.ts';
+import { FORMULAS, FORMULA_CYCLE_ORDER, PALETTES } from '../formulas/registry.ts';
 
 export class HUD {
   public settings: RenderSettings;
@@ -17,7 +17,7 @@ export class HUD {
   public onResetView?: () => void;
   public onToggleAccumulation?: (enabled: boolean) => void;
 
-  private formulaList: FormulaDefinition[] = Object.values(FORMULAS);
+  private formulaList: FormulaDefinition[] = FORMULA_CYCLE_ORDER.map(id => FORMULAS[id]).filter(Boolean);
 
   constructor() {
     this.settings = {
