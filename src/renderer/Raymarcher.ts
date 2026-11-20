@@ -18,9 +18,25 @@ export class Raymarcher {
   // Single-frame render target
   private rawFBO: WebGLFramebuffer | null = null;
   private rawTexture: WebGLTexture | null = null;
+  private transitionFBO: WebGLFramebuffer | null = null;
+  private transitionTexture: WebGLTexture | null = null;
+  private transitionWeight: number = 0.0;
+  private hasRenderedAtLeastOnce: boolean = false;
+
+  // Live formula cross-fade: the outgoing formula keeps rendering (with its own params) while it dissolves
+  /** Duration in seconds of the next formula cross-fade */
+  public crossfadeDuration: number = 1.2;
+  private transitionProgress: number = 1.0;
+  private prevFormula: FormulaDefinition | null = null;
+  private prevProgram: WebGLProgram | null = null;
+  private prevParams: Record<string, number> = {};
+  private lastFormula: FormulaDefinition | null = null;
+  private lastParams: Record<string, number> = {};
 
   // Compiled shader programs cache
   private programs: Map<string, WebGLProgram> = new Map();
+  // Programs whose compile/link was kicked off (possibly asynchronously) but not yet verified
+  private pending: Map<string, WebGLProgram> = new Map();
   private currentProgram: WebGLProgram | null = null;
   private currentFormulaId: string = '';
 
@@ -37,6 +53,8 @@ export class Raymarcher {
       throw new Error('WebGL 2.0 is required for Fractal v2.');
     }
     this.gl = gl;
+    // Lets the driver compile/link shaders on background threads so warming never stalls rendering
+    gl.getExtension('KHR_parallel_shader_compile');
 
     // Build full-screen quad
     const [vao] = this.initQuad();
@@ -85,6 +103,10 @@ export class Raymarcher {
         gl.deleteTexture(this.rawTexture);
         gl.deleteFramebuffer(this.rawFBO!);
       }
+      if (this.transitionTexture) {
+        gl.deleteTexture(this.transitionTexture);
+        gl.deleteFramebuffer(this.transitionFBO!);
+      }
 
       const ext = gl.getExtension('EXT_color_buffer_float');
       const internalFormat = ext ? gl.RGBA16F : gl.RGBA;
@@ -102,6 +124,18 @@ export class Raymarcher {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.rawFBO);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.rawTexture, 0);
 
+      this.transitionTexture = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, this.transitionTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, type, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      this.transitionFBO = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.transitionFBO);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.transitionTexture, 0);
+
       this.accumulator.resize(width, height);
     }
   }
@@ -114,35 +148,55 @@ export class Raymarcher {
     return this.accumulator.sampleCount;
   }
 
-  private getOrCompileProgram(formula: FormulaDefinition): WebGLProgram {
-    if (this.programs.has(formula.id)) {
-      return this.programs.get(formula.id)!;
-    }
-
+  private startCompile(formula: FormulaDefinition): WebGLProgram {
     const gl = this.gl;
     const vert = gl.createShader(gl.VERTEX_SHADER)!;
     gl.shaderSource(vert, RAYMARCH_VERT);
     gl.compileShader(vert);
-    if (!gl.getShaderParameter(vert, gl.COMPILE_STATUS)) {
-      throw new Error(`Vertex compile failed: ${gl.getShaderInfoLog(vert)}`);
-    }
 
-    const fragSource = buildRaymarchFrag(formula);
     const frag = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(frag, fragSource);
+    gl.shaderSource(frag, buildRaymarchFrag(formula));
     gl.compileShader(frag);
-    if (!gl.getShaderParameter(frag, gl.COMPILE_STATUS)) {
-      throw new Error(`Formula [${formula.id}] compile failed: ${gl.getShaderInfoLog(frag)}`);
-    }
 
     const prog = gl.createProgram()!;
     gl.attachShader(prog, vert);
     gl.attachShader(prog, frag);
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      throw new Error(`Program link failed: ${gl.getProgramInfoLog(prog)}`);
-    }
+    return prog;
+  }
 
+  /** Begin compiling a formula's shader in the background (non-blocking where the driver supports it) */
+  public warm(formula: FormulaDefinition) {
+    if (this.programs.has(formula.id) || this.pending.has(formula.id)) return;
+    try {
+      this.pending.set(formula.id, this.startCompile(formula));
+    } catch {
+      // Will surface when the formula is actually used
+    }
+  }
+
+  /** True when the formula's program can be used without blocking the frame */
+  public isReady(formula: FormulaDefinition): boolean {
+    if (this.programs.has(formula.id)) return true;
+    const prog = this.pending.get(formula.id);
+    if (!prog) {
+      this.warm(formula);
+      return false;
+    }
+    // COMPLETION_STATUS_KHR = 0x91B1
+    return this.gl.getProgramParameter(prog, 0x91B1) === true;
+  }
+
+  private getOrCompileProgram(formula: FormulaDefinition): WebGLProgram {
+    const cached = this.programs.get(formula.id);
+    if (cached) return cached;
+
+    const gl = this.gl;
+    const prog = this.pending.get(formula.id) ?? this.startCompile(formula);
+    this.pending.delete(formula.id);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      throw new Error(`Formula [${formula.id}] failed to build: ${gl.getProgramInfoLog(prog)}`);
+    }
     this.programs.set(formula.id, prog);
     return prog;
   }
@@ -156,22 +210,85 @@ export class Raymarcher {
     camTarget: Vec3,
     camUp: Vec3,
     time: number,
-    isFlightMode: boolean = false
+    isFlightMode: boolean = false,
+    screenOffset: [number, number] = [0, 0],
+    dt: number = 0.016
   ) {
-    const gl = this.gl;
     this.resize();
 
     if (this.currentFormulaId !== formula.id) {
+      if (this.hasRenderedAtLeastOnce && this.currentProgram && this.lastFormula) {
+        // Keep the outgoing formula alive so both fractals keep moving while they dissolve
+        this.prevFormula = this.lastFormula;
+        this.prevProgram = this.currentProgram;
+        this.prevParams = this.lastParams;
+        this.transitionProgress = 0.0;
+        this.transitionWeight = 1.0;
+      }
       this.currentFormulaId = formula.id;
       this.currentProgram = this.getOrCompileProgram(formula);
       this.resetAccumulation();
     }
+    this.lastFormula = formula;
+    this.lastParams = { ...formulaParams };
 
-    const prog = this.currentProgram!;
+    if (this.prevFormula && this.prevProgram) {
+      this.transitionProgress = Math.min(1.0, this.transitionProgress + dt / Math.max(0.05, this.crossfadeDuration));
+      this.transitionWeight = 1.0 - this.transitionProgress;
+      if (this.transitionProgress >= 1.0) {
+        this.prevFormula = null;
+        this.prevProgram = null;
+        this.transitionWeight = 0.0;
+      }
+    }
+
+    if (this.prevFormula && this.prevProgram && this.transitionFBO) {
+      this.drawScene(this.transitionFBO, this.prevProgram, this.prevFormula, this.prevParams, palette, settings,
+        camPos, camTarget, camUp, time, isFlightMode, screenOffset);
+    }
+    this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
+      camPos, camTarget, camUp, time, isFlightMode, screenOffset);
+
+    // Accumulation Pass
+    let finalAccumTexture = this.rawTexture!;
+    if (settings.progressiveAccumulation) {
+      finalAccumTexture = this.accumulator.accumulate(this.rawTexture!, this.quadVAO);
+    } else {
+      this.accumulator.reset();
+    }
+
+    // Post-Processing Pass (Bloom, ACES tonemap, Chromatic aberration, Screen output, Smooth Formula Dissolve)
+    this.postProcessor.render(
+      finalAccumTexture,
+      settings.exposure,
+      settings.bloomIntensity,
+      settings.progressiveAccumulation ? 0.35 : 0.65,
+      this.transitionTexture,
+      this.transitionWeight
+    );
+
+    this.hasRenderedAtLeastOnce = true;
+  }
+
+  private drawScene(
+    fbo: WebGLFramebuffer,
+    prog: WebGLProgram,
+    formula: FormulaDefinition,
+    formulaParams: Record<string, number>,
+    palette: PalettePreset,
+    settings: RenderSettings,
+    camPos: Vec3,
+    camTarget: Vec3,
+    camUp: Vec3,
+    time: number,
+    isFlightMode: boolean,
+    screenOffset: [number, number]
+  ) {
+    const gl = this.gl;
     gl.useProgram(prog);
 
-    // Render into raw single-frame FBO
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.rawFBO);
+    // Render into the given target
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
     // Uniforms setup
@@ -197,6 +314,7 @@ export class Raymarcher {
     set3f('u_camTarget', camTarget.x, camTarget.y, camTarget.z);
     set3f('u_camUp', camUp.x, camUp.y, camUp.z);
     set2f('u_resolution', this.canvas.width, this.canvas.height);
+    set2f('u_screenOffset', screenOffset[0], screenOffset[1]);
     set1f('u_time', time);
 
     // Halton subpixel jitter & lens bokeh jitter
@@ -205,9 +323,19 @@ export class Raymarcher {
     const jy = settings.progressiveAccumulation ? halton(sampleIdx, 3) - 0.5 : 0.0;
     set2f('u_jitter', jx, jy);
 
-    // Circular lens aperture jitter
-    const lensR = settings.progressiveAccumulation ? Math.sqrt(halton(sampleIdx, 5)) : 0.0;
-    const lensTheta = settings.progressiveAccumulation ? halton(sampleIdx, 7) * 2.0 * Math.PI : 0.0;
+    // Circular lens aperture jitter (active whenever aperture > 0, responsive in real-time)
+    let lensR = 0.0;
+    let lensTheta = 0.0;
+    if (settings.aperture > 0.0) {
+      if (settings.progressiveAccumulation) {
+        lensR = Math.sqrt(halton(sampleIdx, 5));
+        lensTheta = halton(sampleIdx, 7) * 2.0 * Math.PI;
+      } else {
+        const sampleStep = (time * 60.0) % 64.0;
+        lensR = Math.sqrt(halton(Math.floor(sampleStep) + 1, 5));
+        lensTheta = halton(Math.floor(sampleStep) + 1, 7) * 2.0 * Math.PI;
+      }
+    }
     set2f('u_lensJitter', lensR * Math.cos(lensTheta), lensR * Math.sin(lensTheta));
 
     // Optics & Materials
@@ -221,10 +349,20 @@ export class Raymarcher {
     // Volumetrics & Lighting
     const azRad = (settings.lightAzimuth * Math.PI) / 180.0;
     const elRad = (settings.lightElevation * Math.PI) / 180.0;
-    const lx = Math.cos(elRad) * Math.sin(azRad);
-    const ly = Math.sin(elRad);
-    const lz = Math.cos(elRad) * Math.cos(azRad);
-    set3f('u_lightDir', lx, ly, lz);
+    let lx = Math.cos(elRad) * Math.sin(azRad);
+    let ly = Math.sin(elRad);
+    let lz = Math.cos(elRad) * Math.cos(azRad);
+
+    // Monte Carlo sun disk jitter during progressive accumulation for soft penumbra
+    if (settings.progressiveAccumulation && sampleIdx > 1) {
+      const sunJitterR = Math.sqrt(halton(sampleIdx, 11)) * 0.022;
+      const sunJitterTheta = halton(sampleIdx, 13) * 2.0 * Math.PI;
+      lx += sunJitterR * Math.cos(sunJitterTheta);
+      ly += sunJitterR * Math.sin(sunJitterTheta);
+      lz += sunJitterR * Math.sin(sunJitterTheta * 0.5);
+    }
+    const lNorm = Math.hypot(lx, ly, lz) || 1.0;
+    set3f('u_lightDir', lx / lNorm, ly / lNorm, lz / lNorm);
     set1f('u_sunIntensity', settings.sunIntensity);
     set1f('u_rimIntensity', settings.rimIntensity);
     set1f('u_rimElevation', settings.rimElevation);
@@ -257,21 +395,5 @@ export class Raymarcher {
     // Draw single raymarch pass
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    // Accumulation Pass
-    let finalAccumTexture = this.rawTexture!;
-    if (settings.progressiveAccumulation) {
-      finalAccumTexture = this.accumulator.accumulate(this.rawTexture!, this.quadVAO);
-    } else {
-      this.accumulator.reset();
-    }
-
-    // Post-Processing Pass (Bloom, ACES tonemap, Chromatic aberration, Screen output)
-    this.postProcessor.render(
-      finalAccumTexture,
-      settings.exposure,
-      settings.bloomIntensity,
-      settings.progressiveAccumulation ? 0.35 : 0.65
-    );
   }
 }

@@ -15,6 +15,8 @@ class App {
 
   private lastTime: number = performance.now();
   private fps: number = 60.0;
+  private currentOffsetX: number = 0;
+  private currentOffsetY: number = 0;
 
   constructor() {
     this.canvas = document.getElementById('gl-canvas') as HTMLCanvasElement;
@@ -32,6 +34,17 @@ class App {
     this.setupHUDListeners();
     this.setupWindowListeners();
     this.startLoop();
+
+    // Grabbing the camera takes control back from the auto-play tour
+    this.orbitController.onUserInteract = () => this.hud.pauseTourOnInteract();
+
+    // Auto-play the built-in tour on launch (after the first shader compile/frame)
+    setTimeout(() => this.hud.autoStartTour(), 900);
+
+    // Pre-compile every other formula's shader in the background so formula switches never hitch
+    this.hud.onWarmFormula = (f) => this.raymarcher.warm(f);
+    this.hud.isFormulaReady = (f) => this.raymarcher.isReady(f);
+    this.hud.getAllFormulas().forEach((f, i) => setTimeout(() => this.raymarcher.warm(f), 2500 + i * 600));
   }
 
   private setupHUDListeners() {
@@ -59,9 +72,13 @@ class App {
       invalidateAccum();
     };
 
-    this.hud.onFormulaChange = (formula) => {
-      this.camera.setView(formula.defaultCam.pos, formula.defaultCam.target);
-      this.orbitController.syncFromCamera();
+    this.hud.onFormulaChange = (formula, fromTour) => {
+      // Tour: long, glide-matched dissolve. Manual switch: a quicker (still smooth) one.
+      this.raymarcher.crossfadeDuration = fromTour ? 2.0 : 0.9;
+      // During the auto-play tour the HUD drives the camera itself (glides to the next loop's first keyframe)
+      if (!fromTour) {
+        this.orbitController.transitionTo(formula.defaultCam.pos, formula.defaultCam.target, [0, 1, 0], 0.85);
+      }
       invalidateAccum();
     };
 
@@ -71,8 +88,7 @@ class App {
 
     this.hud.onResetView = () => {
       const formula = this.hud.getActiveFormula();
-      this.camera.setView(formula.defaultCam.pos, formula.defaultCam.target);
-      this.orbitController.syncFromCamera();
+      this.orbitController.transitionTo(formula.defaultCam.pos, formula.defaultCam.target, [0, 1, 0], 0.75);
       invalidateAccum();
     };
 
@@ -116,6 +132,27 @@ class App {
       // Camera controller update
       this.orbitController.update(dt);
 
+      // Viewport compensation when settings panel is open
+      const drawer = document.getElementById('settings-drawer');
+      const isDrawerOpen = drawer && !drawer.classList.contains('closed');
+      // Desktop: drawer is a left side panel (shift horizontally). Mobile: bottom sheet (shift vertically).
+      const isMobile = window.innerWidth <= 720;
+      const drawerSize = drawer ? (isMobile ? drawer.offsetHeight : drawer.offsetWidth) : 420;
+      const targetOffsetX = isDrawerOpen && !isMobile ? drawerSize * 0.5 : 0.0;
+      const targetOffsetY = isDrawerOpen && isMobile ? drawerSize * 0.5 : 0.0;
+      const diff = targetOffsetX - this.currentOffsetX;
+      const diffY = targetOffsetY - this.currentOffsetY;
+      if (Math.abs(diff) > 0.2 || Math.abs(diffY) > 0.2) {
+        const k = Math.min(1.0, dt * 10.0);
+        this.currentOffsetX += diff * k;
+        this.currentOffsetY += diffY * k;
+        this.raymarcher.resetAccumulation();
+      } else if (this.currentOffsetX !== targetOffsetX || this.currentOffsetY !== targetOffsetY) {
+        this.currentOffsetX = targetOffsetX;
+        this.currentOffsetY = targetOffsetY;
+        this.raymarcher.resetAccumulation();
+      }
+
       // Render frame
       const formula = this.hud.getActiveFormula();
       const formulaParams = this.hud.getDynamicParams();
@@ -130,7 +167,9 @@ class App {
         this.camera.target,
         this.camera.up,
         now * 0.001,
-        false
+        false,
+        [this.currentOffsetX, this.currentOffsetY],
+        dt
       );
 
       // Update HUD stats

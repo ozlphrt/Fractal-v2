@@ -9,6 +9,8 @@ export class PostProcessor {
   private quadVAO: WebGLVertexArrayObject;
 
   private accumTextureLoc: WebGLUniformLocation | null = null;
+  private transitionTextureLoc: WebGLUniformLocation | null = null;
+  private transitionWeightLoc: WebGLUniformLocation | null = null;
   private exposureLoc: WebGLUniformLocation | null = null;
   private bloomIntensityLoc: WebGLUniformLocation | null = null;
   private chromaticAberrationLoc: WebGLUniformLocation | null = null;
@@ -36,6 +38,8 @@ export class PostProcessor {
 
     this.program = prog;
     this.accumTextureLoc = gl.getUniformLocation(prog, 'u_accumTexture');
+    this.transitionTextureLoc = gl.getUniformLocation(prog, 'u_transitionTexture');
+    this.transitionWeightLoc = gl.getUniformLocation(prog, 'u_transitionWeight');
     this.exposureLoc = gl.getUniformLocation(prog, 'u_exposure');
     this.bloomIntensityLoc = gl.getUniformLocation(prog, 'u_bloomIntensity');
     this.chromaticAberrationLoc = gl.getUniformLocation(prog, 'u_chromaticAberration');
@@ -45,7 +49,9 @@ export class PostProcessor {
     accumTexture: WebGLTexture,
     exposure: number = 1.0,
     bloomIntensity: number = 0.8,
-    chromaticAberration: number = 1.0
+    chromaticAberration: number = 1.0,
+    transitionTexture: WebGLTexture | null = null,
+    transitionWeight: number = 0.0
   ) {
     const gl = this.gl;
     if (!this.program) return;
@@ -59,6 +65,11 @@ export class PostProcessor {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, accumTexture);
     gl.uniform1i(this.accumTextureLoc, 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, transitionTexture || accumTexture);
+    gl.uniform1i(this.transitionTextureLoc, 1);
+    gl.uniform1f(this.transitionWeightLoc, transitionWeight);
 
     gl.uniform1f(this.exposureLoc, exposure);
     gl.uniform1f(this.bloomIntensityLoc, bloomIntensity);

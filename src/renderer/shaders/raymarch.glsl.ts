@@ -30,6 +30,7 @@ uniform vec3 u_camPos;
 uniform vec3 u_camTarget;
 uniform vec3 u_camUp;
 uniform vec2 u_resolution;
+uniform vec2 u_screenOffset; // Viewport center offset (e.g. for side drawer compensation)
 uniform float u_time;
 uniform vec2 u_jitter; // Halton sub-pixel jitter
 uniform vec2 u_lensJitter; // Halton lens bokeh jitter
@@ -111,13 +112,14 @@ float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     return clamp(res, 0.0, 1.0);
 }
 
-// High-efficiency Ambient Occlusion with macro-radius filtering
-float calcAO(vec3 pos, vec3 nor) {
+// High-efficiency Ambient Occlusion with macro-radius filtering and subpixel dither
+float calcAO(vec3 pos, vec3 nor, vec2 jitter) {
     float occ = 0.0;
     float sca = 1.0;
     vec4 trap;
+    float randOffset = fract(sin(dot(pos.xy + jitter, vec2(12.9898, 78.233))) * 43758.5453);
     for (int i = 0; i < 4; i++) {
-        float h = 0.025 + 0.12 * float(i);
+        float h = 0.02 + (0.10 + 0.025 * randOffset) * float(i);
         float d = mapFractal(pos + h * nor, trap);
         occ += max(0.0, h - d) * sca;
         sca *= 0.72;
@@ -127,8 +129,12 @@ float calcAO(vec3 pos, vec3 nor) {
 
 // Primary Raymarcher
 void main() {
-    // Screen coordinates with sub-pixel jitter
-    vec2 p = (gl_FragCoord.xy + u_jitter - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
+    // Screen coordinates with sub-pixel jitter and viewport offset compensation for side drawer
+    vec2 center = 0.5 * u_resolution.xy + u_screenOffset;
+    float visibleWidth = u_resolution.x - 2.0 * abs(u_screenOffset.x);
+    float visibleHeight = u_resolution.y - 2.0 * abs(u_screenOffset.y);
+    float aspectMin = min(visibleWidth, visibleHeight);
+    vec2 p = (2.0 * (gl_FragCoord.xy + u_jitter - center)) / aspectMin;
 
     // Camera basis vectors
     vec3 cw = normalize(u_camTarget - u_camPos);
@@ -205,7 +211,7 @@ void main() {
 
         // Soft Shadows & AO
         float shadow = (diff > 0.005) ? calcShadow(hitPos + nor * max(0.012, normEps * 3.0), u_lightDir, 0.025, 4.0, 12.0) : 0.0;
-        float ao = calcAO(hitPos, nor);
+        float ao = calcAO(hitPos, nor, u_jitter);
 
         // Natural rock crevice weathering
         albedo = mix(albedo * 0.65, albedo, smoothstep(0.1, 0.9, ao));

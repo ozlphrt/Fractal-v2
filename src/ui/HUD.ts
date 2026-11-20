@@ -1,22 +1,38 @@
 // src/ui/HUD.ts
-// Industrial Studio HUD coordinator: quick-select popovers, precision sliders, tab defaults storage, and keyframe loops
+// Industrial Studio HUD coordinator: quick-select popovers, precision sliders, tab defaults storage,
+// global full-scene keyframe loops with monotonic cubic interpolation and direct palette morphing
 
 import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
 import { FORMULAS, FORMULA_CYCLE_ORDER, FORMULA_GROUPS, PALETTES } from '../formulas/registry.ts';
-import { CameraSnapshot, KeyframeEngine } from '../animation/KeyframeEngine.ts';
+import { CameraSnapshot, Keyframe, KeyframeEngine, slerpVec3 } from '../animation/KeyframeEngine.ts';
+
+/** Formula numbers (as shown in the UI) the auto-play tour visits first; everything else follows in numeric order */
+const TOUR_PRIORITY = [3, 4, 15, 16, 17, 7, 8, 9];
+
+function buildTourOrder(count: number): number[] {
+  const first = TOUR_PRIORITY.map(n => n - 1).filter(i => i >= 0 && i < count);
+  const rest: number[] = [];
+  for (let i = 0; i < count; i++) if (!first.includes(i)) rest.push(i);
+  return [...first, ...rest];
+}
 
 export class HUD {
   public settings: RenderSettings;
   public activeFormulaIndex: number = 0;
   public activePaletteIndex: number = 0;
-  public currentMode: 'orbit' | 'flight' = 'orbit';
+  public currentPalette: PalettePreset;
 
   public keyframeEngine: KeyframeEngine = new KeyframeEngine();
+  public selectedKeyframeId: string | null = null;
+  public dynamicParamValues: Record<string, number> = {};
 
   public onSettingChange?: () => void;
-  public onFormulaChange?: (formula: FormulaDefinition) => void;
+  public onFormulaChange?: (formula: FormulaDefinition, fromTour?: boolean) => void;
+  /** Ask the renderer to start compiling a formula's shader in the background */
+  public onWarmFormula?: (formula: FormulaDefinition) => void;
+  /** Whether a formula's shader is compiled and can be used without a hitch */
+  public isFormulaReady?: (formula: FormulaDefinition) => boolean;
   public onPaletteChange?: (palette: PalettePreset) => void;
-  public onModeChange?: (mode: 'orbit' | 'flight') => void;
   public onResetView?: () => void;
   public onToggleAccumulation?: (enabled: boolean) => void;
 
@@ -26,9 +42,19 @@ export class HUD {
   private formulaList: FormulaDefinition[] = FORMULA_CYCLE_ORDER.map(id => FORMULAS[id]).filter(Boolean);
 
   constructor() {
-    // Default to Lace Gasket
-    const defaultIdx = this.formulaList.findIndex(f => f.id === 'lace_gasket');
-    this.activeFormulaIndex = defaultIdx >= 0 ? defaultIdx : 0;
+    // Start on the first formula of the tour
+    this.activeFormulaIndex = Math.min(buildTourOrder(this.formulaList.length)[0], this.formulaList.length - 1);
+
+    // Default to Desert Sandstone
+    const initialPal = PALETTES[0];
+    this.currentPalette = {
+      id: initialPal.id,
+      name: initialPal.name,
+      a: [...initialPal.a],
+      b: [...initialPal.b],
+      c: [...initialPal.c],
+      d: [...initialPal.d]
+    };
 
     this.settings = {
       focalDistance: 2.35,
@@ -42,11 +68,11 @@ export class HUD {
 
       // Calibrated 3-Point Studio Lighting & Atmosphere
       sunIntensity: 1.0,
-      rimIntensity: 0.32,     // Subtle, non-overpowering dark midnight rim light
+      rimIntensity: 0.32,
       rimElevation: 30,
-      fillIntensity: 0.38,    // Gentle cool fill so shadowed faces retain geological detail
-      glowIntensity: 0.35,    // Volumetric mist glow around fractal surface
-      headlamp: true,         // Active ONLY in 6DOF Flight mode
+      fillIntensity: 0.38,
+      glowIntensity: 0.35,
+      headlamp: true,
       headlampIntensity: 1.5,
       fogDensity: 0.03,
       godraysIntensity: 0.0,
@@ -63,122 +89,112 @@ export class HUD {
     // Load any saved defaults from localStorage
     this.loadAllDefaults();
 
-    this.initDOM();
     this.initKeyframeEngine();
+    this.setupEventListeners();
   }
 
   public getActiveFormula(): FormulaDefinition {
-    return this.formulaList[this.activeFormulaIndex];
+    return this.formulaList[this.activeFormulaIndex] || this.formulaList[0];
+  }
+
+  public getAllFormulas(): FormulaDefinition[] {
+    return this.formulaList;
   }
 
   public getActivePalette(): PalettePreset {
-    return PALETTES[this.activePaletteIndex];
+    return this.currentPalette;
   }
 
-  private initDOM() {
-    // Mode toggles
-    const btnOrbit = document.getElementById('btn-mode-orbit')!;
-    const btnFlight = document.getElementById('btn-mode-flight')!;
-    const crosshair = document.getElementById('view-crosshair')!;
-
-    btnOrbit.addEventListener('click', () => {
-      this.currentMode = 'orbit';
-      btnOrbit.classList.add('active');
-      btnFlight.classList.remove('active');
-      crosshair.classList.add('hidden');
-      this.onModeChange?.('orbit');
-    });
-
-    btnFlight.addEventListener('click', () => {
-      this.currentMode = 'flight';
-      btnFlight.classList.add('active');
-      btnOrbit.classList.remove('active');
-      crosshair.classList.remove('hidden');
-      this.onModeChange?.('flight');
-    });
-
-    // Display update helpers
-    const labelFormula = document.getElementById('current-formula-label')!;
-    const labelPalette = document.getElementById('current-palette-label')!;
-
+  private setupEventListeners() {
     const updateDisplays = () => {
-      const f = this.getActiveFormula();
-      labelFormula.textContent = `${this.activeFormulaIndex + 1}. ${f.name}`;
-      labelPalette.textContent = this.getActivePalette().name;
+      this.setRangeValue('param-focal-dist', 'val-focal-dist', this.settings.focalDistance);
+      this.setRangeValue('param-aperture', 'val-aperture', this.settings.aperture);
+      this.setRangeValue('param-bloom', 'val-bloom', this.settings.bloomIntensity);
+      this.setRangeValue('param-exposure', 'val-exposure', this.settings.exposure);
 
-      const dropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement;
-      if (dropdown && dropdown.value !== f.id) {
-        dropdown.value = f.id;
-      }
+      this.setRangeValue('param-mat-ior', 'val-mat-ior', this.settings.ior);
+      this.setRangeValue('param-mat-dispersion', 'val-mat-dispersion', this.settings.dispersion);
+      this.setRangeValue('param-mat-sss', 'val-mat-sss', this.settings.subsurface);
+      this.setRangeValue('param-mat-emissive', 'val-mat-emissive', this.settings.emissiveVeins);
 
-      this.updatePopoverActiveStates();
-      this.refreshAllKeyframeTracks();
+      this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity);
+      this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity);
+      this.setRangeValue('param-rim-elevation', 'val-rim-elevation', this.settings.rimElevation, '°');
+      this.setRangeValue('param-fill-intensity', 'val-fill-intensity', this.settings.fillIntensity);
+      this.setRangeValue('param-glow-intensity', 'val-glow-intensity', this.settings.glowIntensity);
+      this.setRangeValue('param-light-azimuth', 'val-light-azimuth', this.settings.lightAzimuth, '°');
+      this.setRangeValue('param-light-elevation', 'val-light-elevation', this.settings.lightElevation, '°');
+      this.setRangeValue('param-fog', 'val-fog', this.settings.fogDensity);
+      this.setRangeValue('param-godrays', 'val-godrays', this.settings.godraysIntensity);
     };
 
-    // Populate Grouped Formula Dropdown in settings drawer
-    const dropdown = document.getElementById('formula-dropdown-select') as HTMLSelectElement;
-    if (dropdown) {
-      dropdown.innerHTML = '';
-      for (const group of FORMULA_GROUPS) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = `${group.badge} (${group.name})`;
-        for (const id of group.ids) {
-          const f = FORMULAS[id];
-          if (!f) continue;
-          const idx = this.formulaList.findIndex(item => item.id === id);
-          const opt = document.createElement('option');
-          opt.value = id;
-          opt.textContent = `${idx + 1}. ${f.name}`;
-          optgroup.appendChild(opt);
-        }
-        dropdown.appendChild(optgroup);
-      }
-
-      dropdown.addEventListener('change', () => {
-        const targetId = dropdown.value;
-        const targetIdx = this.formulaList.findIndex(f => f.id === targetId);
-        if (targetIdx >= 0) {
-          this.selectFormula(targetIdx);
-        }
-      });
+    // Formula label and smooth transition
+    const f = this.getActiveFormula();
+    const labelFormula = document.getElementById('current-formula-label');
+    if (labelFormula) {
+      labelFormula.textContent = `${this.activeFormulaIndex + 1}. ${f.name}`;
     }
 
-    // Prev / Next Formula Arrows
-    document.getElementById('btn-prev-formula')!.addEventListener('click', (e) => {
+    // Material label
+    const pal = this.getActivePalette();
+    const labelPalette = document.getElementById('current-palette-label');
+    if (labelPalette) {
+      labelPalette.textContent = pal.name;
+    }
+
+    // Prev / Next Formula Arrows with subtle label cross-fade
+    const btnPrevFormula = document.getElementById('btn-prev-formula');
+    const btnNextFormula = document.getElementById('btn-next-formula');
+    btnPrevFormula?.addEventListener('click', (e) => {
       e.stopPropagation();
+      labelFormula?.classList.add('fading');
+      setTimeout(() => labelFormula?.classList.remove('fading'), 250);
       this.selectFormula((this.activeFormulaIndex - 1 + this.formulaList.length) % this.formulaList.length);
     });
 
-    document.getElementById('btn-next-formula')!.addEventListener('click', (e) => {
+    btnNextFormula?.addEventListener('click', (e) => {
       e.stopPropagation();
+      labelFormula?.classList.add('fading');
+      setTimeout(() => labelFormula?.classList.remove('fading'), 250);
       this.selectFormula((this.activeFormulaIndex + 1) % this.formulaList.length);
     });
 
-    // Prev / Next Palette Arrows
-    document.getElementById('btn-prev-palette')!.addEventListener('click', (e) => {
+    // Prev / Next Palette Arrows with subtle label cross-fade
+    const btnPrevPalette = document.getElementById('btn-prev-palette');
+    const btnNextPalette = document.getElementById('btn-next-palette');
+    btnPrevPalette?.addEventListener('click', (e) => {
       e.stopPropagation();
+      labelPalette?.classList.add('fading');
+      setTimeout(() => labelPalette?.classList.remove('fading'), 250);
       this.selectPalette((this.activePaletteIndex - 1 + PALETTES.length) % PALETTES.length);
     });
 
-    document.getElementById('btn-next-palette')!.addEventListener('click', (e) => {
+    btnNextPalette?.addEventListener('click', (e) => {
       e.stopPropagation();
+      labelPalette?.classList.add('fading');
+      setTimeout(() => labelPalette?.classList.remove('fading'), 250);
       this.selectPalette((this.activePaletteIndex + 1) % PALETTES.length);
     });
 
     // Popover Setup
     this.setupPopovers();
 
-    // Accumulation button
-    const btnAccum = document.getElementById('btn-toggle-pathtrace')!;
-    btnAccum.addEventListener('click', () => {
+    // Accumulation button (if present)
+    const btnAccum = document.getElementById('btn-toggle-pathtrace');
+    btnAccum?.addEventListener('click', () => {
       this.settings.progressiveAccumulation = !this.settings.progressiveAccumulation;
+      if (this.settings.progressiveAccumulation && this.settings.aperture === 0.0) {
+        this.settings.aperture = 0.012;
+        this.setRangeValue('param-aperture', 'val-aperture', 0.012);
+      }
       btnAccum.classList.toggle('active', this.settings.progressiveAccumulation);
       btnAccum.setAttribute('aria-pressed', String(this.settings.progressiveAccumulation));
       this.onToggleAccumulation?.(this.settings.progressiveAccumulation);
     });
 
-    // Reset view
-    document.getElementById('btn-reset-cam')!.addEventListener('click', () => {
+    // Reset view button (if present)
+    const btnResetCam = document.getElementById('btn-reset-cam');
+    btnResetCam?.addEventListener('click', () => {
       this.onResetView?.();
     });
 
@@ -210,19 +226,36 @@ export class HUD {
         const targetId = btn.dataset.tab!;
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
         document.getElementById(targetId)?.classList.add('active');
-        this.refreshAllKeyframeTracks();
       });
     });
 
     // Optics & Physics sliders
     this.bindRange('param-focal-dist', 'val-focal-dist', val => this.settings.focalDistance = val);
     this.bindRange('param-aperture', 'val-aperture', val => this.settings.aperture = val);
-    this.bindRange('param-ior', 'val-ior', val => this.settings.ior = val);
-    this.bindRange('param-dispersion', 'val-dispersion', val => this.settings.dispersion = val);
-    this.bindRange('param-sss', 'val-sss', val => this.settings.subsurface = val);
-    this.bindRange('param-emissive', 'val-emissive', val => this.settings.emissiveVeins = val);
     this.bindRange('param-bloom', 'val-bloom', val => this.settings.bloomIntensity = val);
     this.bindRange('param-exposure', 'val-exposure', val => this.settings.exposure = val);
+
+    // Materials sliders
+    this.bindRange('param-mat-ior', 'val-mat-ior', val => this.settings.ior = val);
+    this.bindRange('param-mat-dispersion', 'val-mat-dispersion', val => this.settings.dispersion = val);
+    this.bindRange('param-mat-sss', 'val-mat-sss', val => this.settings.subsurface = val);
+    this.bindRange('param-mat-emissive', 'val-mat-emissive', val => this.settings.emissiveVeins = val);
+
+    // Populate Material dropdown in Materials tab
+    const matDropdown = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
+    if (matDropdown) {
+      matDropdown.innerHTML = '';
+      PALETTES.forEach((p, idx) => {
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = `${idx + 1}. ${p.name}`;
+        matDropdown.appendChild(opt);
+      });
+      matDropdown.value = String(this.activePaletteIndex);
+      matDropdown.addEventListener('change', () => {
+        this.selectPalette(parseInt(matDropdown.value, 10));
+      });
+    }
 
     // 3-Point Lighting & Atmosphere sliders
     this.bindRange('param-sun-intensity', 'val-sun-intensity', val => this.settings.sunIntensity = val);
@@ -235,33 +268,25 @@ export class HUD {
     this.bindRange('param-fog', 'val-fog', val => this.settings.fogDensity = val);
     this.bindRange('param-godrays', 'val-godrays', val => this.settings.godraysIntensity = val);
 
-    // 6DOF Flight controls
-    this.bindRange('param-flight-speed', 'val-flight-speed', val => this.settings.flightSpeed = val);
-    this.bindRange('param-headlamp-intensity', 'val-headlamp-intensity', val => this.settings.headlampIntensity = val);
-
-    const checkHeadlamp = document.getElementById('param-headlamp') as HTMLInputElement;
-    checkHeadlamp?.addEventListener('change', () => {
-      this.settings.headlamp = checkHeadlamp.checked;
-      this.onSettingChange?.();
-    });
-
-    const checkAdaptive = document.getElementById('param-adaptive-speed') as HTMLInputElement;
-    checkAdaptive?.addEventListener('change', () => {
-      this.settings.adaptiveSpeed = checkAdaptive.checked;
-      this.onSettingChange?.();
-    });
-
-    const checkCushion = document.getElementById('param-wall-cushion') as HTMLInputElement;
-    checkCushion?.addEventListener('change', () => {
-      this.settings.wallCushion = checkCushion.checked;
-      this.onSettingChange?.();
-    });
-
-    // Wire Save / Reset Defaults buttons for each tab
+    // Wire Save / Copy / Paste / Reset Defaults buttons for each tab
     document.querySelectorAll<HTMLButtonElement>('.save-defaults-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const tabId = btn.dataset.tab!;
         this.saveTabDefaults(tabId, btn);
+      });
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('.copy-settings-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.dataset.tab!;
+        this.copyTabSettings(tabId, btn);
+      });
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('.paste-settings-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.dataset.tab!;
+        this.pasteTabSettings(tabId, btn);
       });
     });
 
@@ -272,87 +297,455 @@ export class HUD {
       });
     });
 
-    // Wire Keyframe Add & Play buttons for each tab
-    const tabIds = ['tab-optics', 'tab-lighting', 'tab-params', 'tab-flight'];
-    for (const tabId of tabIds) {
-      const addBtn = document.getElementById(`btn-add-${tabId}`);
-      addBtn?.addEventListener('click', () => {
-        const f = this.getActiveFormula();
-        const fallbackCam: CameraSnapshot = { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
-        const cam = this.getCameraSnapshot ? this.getCameraSnapshot() : fallbackCam;
-        const vals = this.getTabValues(tabId);
-        this.keyframeEngine.addKeyframe(f.id, tabId, cam, vals);
-      });
+    // Global Keyframe Controls
+    const btnAddGlobal = document.getElementById('btn-add-global');
+    btnAddGlobal?.addEventListener('click', () => {
+      const f = this.getActiveFormula();
+      const fallbackCam: CameraSnapshot = { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
+      const cam = this.getCameraSnapshot ? this.getCameraSnapshot() : fallbackCam;
+      const allVals = this.getAllValues();
+      const frame = this.keyframeEngine.addKeyframe(
+        f.id,
+        cam,
+        allVals,
+        this.currentPalette,
+        this.activePaletteIndex
+      );
+      this.selectedKeyframeId = frame.id;
+      this.refreshGlobalKeyframeTrack();
+    });
 
-      const playBtn = document.getElementById(`btn-play-${tabId}`);
-      playBtn?.addEventListener('click', () => {
-        const f = this.getActiveFormula();
-        this.keyframeEngine.togglePlay(f.id, tabId);
-        this.refreshAllKeyframeTracks();
-      });
-    }
+    const btnUpdateGlobal = document.getElementById('btn-update-global') as HTMLButtonElement | null;
+    btnUpdateGlobal?.addEventListener('click', () => {
+      this.updateActiveGlobalKeyframe(btnUpdateGlobal);
+    });
+
+    const btnPlayGlobal = document.getElementById('btn-play-global');
+    btnPlayGlobal?.addEventListener('click', () => {
+      // Same behaviour as the dock play button: auto-play every formula's loop until paused
+      this.toggleStoredLoopForActiveFormula();
+    });
+
+    const btnExportGlobal = document.getElementById('btn-export-global');
+    const flashLabel = (btn: HTMLElement | null, text: string, orig: string) => {
+      if (!btn) return;
+      btn.textContent = text;
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+    };
+    btnExportGlobal?.addEventListener('click', () => {
+      const blob = new Blob([this.keyframeEngine.exportJSON()], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fractal-keyframes.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      flashLabel(btnExportGlobal, 'Saved ✓', '⇩ Export JSON');
+    });
+
+    const btnImportGlobal = document.getElementById('btn-import-global');
+    const fileInput = document.getElementById('input-import-global') as HTMLInputElement | null;
+    btnImportGlobal?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        const count = this.keyframeEngine.importJSON(await file.text());
+        this.selectedKeyframeId = null;
+        flashLabel(btnImportGlobal, `Loaded ${count} ✓`, '⇧ Import JSON');
+      } catch {
+        flashLabel(btnImportGlobal, 'Invalid file', '⇧ Import JSON');
+      }
+      fileInput.value = '';
+    });
+
+    // Play Stored Loop for active formula directly from dock button
+    const btnDockPlay = document.getElementById('btn-dock-play');
+    btnDockPlay?.addEventListener('click', () => {
+      this.toggleStoredLoopForActiveFormula();
+    });
+
+    // Collapsible keyframe footer (starts collapsed on small screens to free up space)
+    const kfFooter = document.getElementById('drawer-global-footer');
+    const kfToggle = document.getElementById('btn-toggle-kf');
+    const setKfCollapsed = (collapsed: boolean) => {
+      kfFooter?.classList.toggle('collapsed', collapsed);
+      kfToggle?.setAttribute('aria-expanded', String(!collapsed));
+    };
+    setKfCollapsed(window.innerWidth <= 720);
+    kfToggle?.addEventListener('click', () => {
+      setKfCollapsed(!kfFooter?.classList.contains('collapsed'));
+    });
 
     updateDisplays();
+    this.updateGlyphs();
     this.populateFormulaParams();
-    this.refreshAllKeyframeTracks();
+    this.refreshGlobalKeyframeTrack();
+  }
+
+  public updateActiveGlobalKeyframe(triggerBtn?: HTMLElement | null) {
+    const f = this.getActiveFormula();
+    const frames = this.keyframeEngine.getFramesFor(f.id);
+    if (frames.length === 0) return;
+
+    let targetId = this.selectedKeyframeId;
+    if (!targetId || !frames.some(k => k.id === targetId)) {
+      targetId = frames[frames.length - 1].id;
+      this.selectedKeyframeId = targetId;
+    }
+
+    const fallbackCam: CameraSnapshot = { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
+    const cam = this.getCameraSnapshot ? this.getCameraSnapshot() : fallbackCam;
+    const vals = this.getAllValues();
+
+    const success = this.keyframeEngine.updateKeyframe(
+      targetId,
+      cam,
+      vals,
+      this.currentPalette,
+      this.activePaletteIndex
+    );
+    if (success) {
+      if (triggerBtn) {
+        triggerBtn.classList.add('updated-flash');
+        setTimeout(() => triggerBtn.classList.remove('updated-flash'), 600);
+      }
+      this.refreshGlobalKeyframeTrack();
+    }
   }
 
   private initKeyframeEngine() {
     this.keyframeEngine.onTrackChange = () => {
-      this.refreshAllKeyframeTracks();
+      this.refreshGlobalKeyframeTrack();
     };
 
-    this.keyframeEngine.onApplyState = (camera, values, tabId) => {
+    this.keyframeEngine.onApplyState = (camera, values, palette, paletteIndex) => {
       this.onApplyKeyframeCamera?.(camera);
-      this.applyTabValues(tabId, values);
+      this.applyAllValues(values, palette, paletteIndex);
       this.onSettingChange?.();
+      this.highlightPlayingChip();
+    };
+
+    this.keyframeEngine.onCycleComplete = () => {
+      if (this.tourActive) this.advanceTour();
     };
   }
 
-  public refreshAllKeyframeTracks() {
+  private lastPlayingIndex = -2;
+
+  // Highlights the keyframe chip the loop is currently at/heading to, without rebuilding the DOM
+  private highlightPlayingChip() {
+    const strip = document.getElementById('kf-strip-global');
+    if (!strip) return;
     const f = this.getActiveFormula();
-    const tabIds = ['tab-optics', 'tab-lighting', 'tab-params', 'tab-flight'];
+    const playing = this.keyframeEngine.isPlaying && this.keyframeEngine.playingFormulaId === f.id;
+    const idx = playing ? this.keyframeEngine.activeIndex : -1;
+    const nowBadge = document.getElementById('kf-now-badge');
+    if (nowBadge) {
+      const total = this.keyframeEngine.getFramesFor(f.id).length;
+      nowBadge.textContent = idx >= 0 ? `▶ #${idx + 1}/${total}` : '';
+    }
+    if (idx !== this.lastPlayingIndex) {
+      this.lastPlayingIndex = idx;
+      Array.from(strip.children).forEach((el, i) => el.classList.toggle('playing', i === idx));
+    }
+  }
 
-    for (const tabId of tabIds) {
-      const frames = this.keyframeEngine.getFramesFor(f.id, tabId);
-      const countEl = document.getElementById(`kf-count-${tabId}`);
-      if (countEl) {
-        countEl.textContent = `${frames.length} Frame${frames.length === 1 ? '' : 's'}`;
+  public toggleStoredLoopForActiveFormula() {
+    const f = this.getActiveFormula();
+    // Pressing play while the tour (or a loop) is running pauses everything
+    if (this.tourActive || (this.keyframeEngine.isPlaying && this.keyframeEngine.playingFormulaId === f.id)) {
+      this.stopTour();
+      return;
+    }
+    const frames = this.keyframeEngine.getFramesFor(f.id);
+
+    // If no loop is stored yet for this object, automatically seed a gentle cinematic orbit loop!
+    if (frames.length < 2) {
+      const fallbackCam: CameraSnapshot = { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
+      const curCam = this.getCameraSnapshot ? this.getCameraSnapshot() : fallbackCam;
+      const allVals = this.getAllValues();
+
+      // Keyframe 1: current state
+      this.keyframeEngine.addKeyframe(f.id, curCam, allVals, this.currentPalette, this.activePaletteIndex);
+
+      // Keyframe 2: cinematic orbit angle around target
+      const dist = curCam.orbitRadius || 2.5;
+      const yaw = Math.atan2(curCam.pos[0] - curCam.target[0], curCam.pos[2] - curCam.target[2]) + 0.85;
+      const pitch = Math.asin(Math.max(-0.85, Math.min(0.85, (curCam.pos[1] - curCam.target[1]) / dist))) + 0.12;
+      const cosP = Math.cos(pitch);
+
+      const orbitCam: CameraSnapshot = {
+        pos: [
+          curCam.target[0] + dist * cosP * Math.sin(yaw),
+          curCam.target[1] + dist * Math.sin(pitch),
+          curCam.target[2] + dist * cosP * Math.cos(yaw)
+        ],
+        target: [...curCam.target],
+        up: [0, 1, 0],
+        orbitRadius: dist
+      };
+      this.keyframeEngine.addKeyframe(f.id, orbitCam, allVals, this.currentPalette, this.activePaletteIndex);
+    }
+
+    this.tourActive = true;
+    this.keyframeEngine.cycleAtLastKeyframe = true;
+    this.keyframeEngine.segmentDuration = this.tourSegmentDuration(f.id);
+    this.keyframeEngine.play(f.id);
+    this.refreshGlobalKeyframeTrack();
+  }
+
+  // ---- Auto-play tour: play each formula's stored loop one after another until the user pauses ----
+  private tourActive = false;
+  private tourTimer: number | null = null;
+
+  /** Pace each formula so a whole pass takes roughly 35-45s regardless of how many keyframes it has */
+  private tourSegmentDuration(formulaId: string): number {
+    const n = this.keyframeEngine.getFramesFor(formulaId).length;
+    return Math.max(3.0, Math.min(6.0, 40 / Math.max(1, n - 1)));
+  }
+
+  /** Starts the tour automatically on launch (no-op if the current formula has no loop or something is already playing) */
+  public autoStartTour() {
+    if (this.tourActive || this.keyframeEngine.isPlaying) return;
+    const f = this.getActiveFormula();
+    const frames = this.keyframeEngine.getFramesFor(f.id);
+    if (frames.length < 2) return;
+
+    this.tourActive = true;
+    this.keyframeEngine.cycleAtLastKeyframe = true;
+    this.keyframeEngine.segmentDuration = this.tourSegmentDuration(f.id);
+    const intro = 1.2;
+    this.transitionToGlobalKeyframe(frames[0], intro);
+    this.refreshGlobalKeyframeTrack();
+    this.tourTimer = window.setTimeout(() => {
+      this.tourTimer = null;
+      if (!this.tourActive) return;
+      this.keyframeEngine.play(f.id);
+      this.warmNextTourFormula();
+      this.refreshGlobalKeyframeTrack();
+    }, intro * 1000 + 60);
+  }
+
+  /** Called when the user drags / pinches / scrolls the camera: hand control back by pausing playback */
+  public pauseTourOnInteract() {
+    if (this.tourActive || this.keyframeEngine.isPlaying) this.stopTour();
+  }
+
+  public stopTour() {
+    this.tourActive = false;
+    this.keyframeEngine.cycleAtLastKeyframe = false;
+    this.keyframeEngine.segmentDuration = 4.5;
+    if (this.tourTimer !== null) {
+      clearTimeout(this.tourTimer);
+      this.tourTimer = null;
+    }
+    if (this.activeTween !== null) {
+      cancelAnimationFrame(this.activeTween);
+      this.activeTween = null;
+    }
+    this.keyframeEngine.stop();
+    this.refreshGlobalKeyframeTrack();
+  }
+
+  private advanceTour() {
+    const next = this.nextTourIndex();
+    // Only one formula has a loop: the engine simply keeps looping it
+    if (next === -1 || next === this.activeFormulaIndex) return;
+
+    this.keyframeEngine.stop();
+    const nextFormula = this.formulaList[next];
+    this.onWarmFormula?.(nextFormula);
+    const proceed = () => {
+      this.tourTimer = null;
+      if (!this.tourActive) return;
+      // Never switch to a shader that is still compiling (it would stall a frame mid-transition)
+      if (this.isFormulaReady && !this.isFormulaReady(nextFormula)) {
+        this.tourTimer = window.setTimeout(proceed, 120);
+        return;
       }
+      this.beginTourTransition(next);
+    };
+    proceed();
+  }
 
-      const playBtn = document.getElementById(`btn-play-${tabId}`) as HTMLButtonElement;
-      if (playBtn) {
-        const isPlayingThis = this.keyframeEngine.isPlaying && this.keyframeEngine.playingTabId === tabId && this.keyframeEngine.playingFormulaId === f.id;
-        playBtn.disabled = frames.length < 2;
-        playBtn.textContent = isPlayingThis ? '⏸ Pause' : '▶ Loop';
-        playBtn.classList.toggle('active', isPlayingThis);
+  /** Index of the formula the tour visits after the current one (follows TOUR_ORDER), or -1 if none has a loop */
+  private nextTourIndex(): number {
+    const order = buildTourOrder(this.formulaList.length);
+    const pos = Math.max(0, order.indexOf(this.activeFormulaIndex));
+    for (let step = 1; step <= order.length; step++) {
+      const i = order[(pos + step) % order.length];
+      if (this.keyframeEngine.getFramesFor(this.formulaList[i].id).length >= 2) return i;
+    }
+    return -1;
+  }
+
+  /** Pre-compile the shader of the formula the tour will visit next, so the switch is instant */
+  private warmNextTourFormula() {
+    const i = this.nextTourIndex();
+    if (i >= 0) this.onWarmFormula?.(this.formulaList[i]);
+  }
+
+  private beginTourTransition(next: number) {
+    this.selectFormula(next, true);
+    const first = this.keyframeEngine.getFramesFor(this.formulaList[next].id)[0];
+    const duration = 2.0;
+    this.transitionToGlobalKeyframe(first, duration);
+    this.refreshGlobalKeyframeTrack();
+    this.tourTimer = window.setTimeout(() => {
+      this.tourTimer = null;
+      if (!this.tourActive) return;
+      this.keyframeEngine.segmentDuration = this.tourSegmentDuration(this.getActiveFormula().id);
+      this.keyframeEngine.play(this.getActiveFormula().id);
+      this.warmNextTourFormula();
+      this.refreshGlobalKeyframeTrack();
+    }, duration * 1000 + 60);
+  }
+
+  public refreshGlobalKeyframeTrack() {
+    const f = this.getActiveFormula();
+    const frames = this.keyframeEngine.getFramesFor(f.id);
+    const isPlaying = (this.keyframeEngine.isPlaying && this.keyframeEngine.playingFormulaId === f.id) || this.tourActive;
+    const countEl = document.getElementById('kf-count-global');
+    if (countEl) {
+      countEl.textContent = `${frames.length} Frame${frames.length === 1 ? '' : 's'}`;
+    }
+
+    // Sync Drawer Loop button
+    const playBtn = document.getElementById('btn-play-global') as HTMLButtonElement | null;
+    if (playBtn) {
+      playBtn.disabled = frames.length < 2 && !isPlaying;
+      playBtn.textContent = isPlaying ? '⏸ Pause' : '▶ Loop';
+      playBtn.classList.toggle('active', isPlaying);
+    }
+
+    // Sync Dock Play button
+    const dockPlayBtn = document.getElementById('btn-dock-play') as HTMLButtonElement | null;
+    if (dockPlayBtn) {
+      dockPlayBtn.classList.toggle('active', isPlaying);
+      dockPlayBtn.setAttribute('aria-pressed', String(isPlaying));
+      dockPlayBtn.title = isPlaying ? 'Pause Stored Loop' : 'Play Stored Loop for Selected Object';
+      const playIcon = dockPlayBtn.querySelector('.play-icon') as HTMLElement | null;
+      const pauseIcon = dockPlayBtn.querySelector('.pause-icon') as HTMLElement | null;
+      if (playIcon && pauseIcon) {
+        playIcon.style.display = isPlaying ? 'none' : 'block';
+        pauseIcon.style.display = isPlaying ? 'block' : 'none';
       }
+    }
 
-      const strip = document.getElementById(`kf-strip-${tabId}`);
-      if (strip) {
-        strip.innerHTML = '';
-        frames.forEach((kf, idx) => {
-          const chip = document.createElement('div');
-          chip.className = 'keyframe-chip';
-          chip.innerHTML = `
-            <span class="kf-chip-label" title="Jump to Keyframe #${idx + 1}">#${idx + 1}</span>
-            <button class="kf-chip-del" title="Delete Keyframe">✕</button>
-          `;
+    const updateBtn = document.getElementById('btn-update-global') as HTMLButtonElement | null;
+    if (updateBtn) {
+      updateBtn.disabled = frames.length === 0;
+    }
 
-          chip.querySelector('.kf-chip-label')!.addEventListener('click', () => {
-            this.onApplyKeyframeCamera?.(kf.camera);
-            this.applyTabValues(tabId, kf.values);
-            this.onSettingChange?.();
-          });
+    const strip = document.getElementById('kf-strip-global');
+    if (strip) {
+      strip.innerHTML = '';
+      frames.forEach((kf, idx) => {
+        const chip = document.createElement('div');
+        const isSelected = this.selectedKeyframeId === kf.id;
+        chip.className = `keyframe-chip${isSelected ? ' active' : ''}`;
+        chip.dataset.keyframeId = kf.id;
+        chip.innerHTML = `
+          <span class="kf-chip-label" title="Jump to & Smoothly Transition to Keyframe #${idx + 1}">#${idx + 1}</span>
+          <button class="kf-chip-update" title="Update Keyframe #${idx + 1} with current full scene">↺</button>
+          <button class="kf-chip-del" title="Delete Keyframe">✕</button>
+        `;
 
-          chip.querySelector('.kf-chip-del')!.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.keyframeEngine.removeKeyframe(kf.id);
-          });
-
-          strip.appendChild(chip);
+        // Smooth transition to keyframe when clicked
+        chip.querySelector('.kf-chip-label')!.addEventListener('click', () => {
+          this.selectedKeyframeId = kf.id;
+          this.transitionToGlobalKeyframe(kf, 0.75);
+          this.refreshGlobalKeyframeTrack();
         });
+
+        // In-place update keyframe
+        chip.querySelector('.kf-chip-update')!.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.selectedKeyframeId = kf.id;
+          const fallbackCam: CameraSnapshot = { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
+          const cam = this.getCameraSnapshot ? this.getCameraSnapshot() : fallbackCam;
+          const vals = this.getAllValues();
+          this.keyframeEngine.updateKeyframe(
+            kf.id,
+            cam,
+            vals,
+            this.currentPalette,
+            this.activePaletteIndex
+          );
+
+          chip.classList.add('updated-flash');
+          setTimeout(() => chip.classList.remove('updated-flash'), 600);
+
+          const headerUpdateBtn = document.getElementById('btn-update-global');
+          if (headerUpdateBtn) {
+            headerUpdateBtn.classList.add('updated-flash');
+            setTimeout(() => headerUpdateBtn.classList.remove('updated-flash'), 600);
+          }
+        });
+
+        // Delete keyframe
+        chip.querySelector('.kf-chip-del')!.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (this.selectedKeyframeId === kf.id) {
+            this.selectedKeyframeId = null;
+          }
+          this.keyframeEngine.removeKeyframe(kf.id);
+        });
+
+        strip.appendChild(chip);
+      });
+      this.lastPlayingIndex = -2;
+      this.highlightPlayingChip();
+    }
+  }
+
+  public getAllValues(): Record<string, number> {
+    const paramIds = new Set(this.getActiveFormula().params.map(p => p.id));
+    const dyn: Record<string, number> = {};
+    for (const [k, v] of Object.entries(this.dynamicParamValues)) {
+      if (paramIds.has(k)) dyn[k] = v;
+    }
+    return {
+      ...dyn,
+      ...this.getTabValues('tab-optics'),
+      ...this.getTabValues('tab-materials'),
+      ...this.getTabValues('tab-lighting')
+    };
+  }
+
+  public applyAllValues(
+    values: Record<string, number>,
+    palette?: PalettePreset,
+    paletteIndex?: number
+  ) {
+    this.applyTabValues('tab-optics', values);
+    this.applyTabValues('tab-materials', values);
+    this.applyTabValues('tab-lighting', values);
+    this.applyTabValues('tab-params', values);
+
+    if (palette) {
+      this.currentPalette = {
+        id: palette.id,
+        name: palette.name,
+        a: [...palette.a],
+        b: [...palette.b],
+        c: [...palette.c],
+        d: [...palette.d]
+      };
+      this.updatePaletteSwatch();
+    }
+    if (paletteIndex !== undefined && paletteIndex >= 0 && paletteIndex < PALETTES.length) {
+      this.activePaletteIndex = paletteIndex;
+      const label = document.getElementById('current-palette-label');
+      if (label) label.textContent = this.currentPalette.name || PALETTES[paletteIndex].name;
+      const select = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
+      if (select && select.value !== String(paletteIndex)) {
+        select.value = String(paletteIndex);
       }
+      this.updatePopoverActiveStates();
     }
   }
 
@@ -361,12 +754,15 @@ export class HUD {
       return {
         focalDistance: this.settings.focalDistance,
         aperture: this.settings.aperture,
+        bloomIntensity: this.settings.bloomIntensity,
+        exposure: this.settings.exposure
+      };
+    } else if (tabId === 'tab-materials') {
+      return {
         ior: this.settings.ior,
         dispersion: this.settings.dispersion,
         subsurface: this.settings.subsurface,
-        emissiveVeins: this.settings.emissiveVeins,
-        bloomIntensity: this.settings.bloomIntensity,
-        exposure: this.settings.exposure
+        emissiveVeins: this.settings.emissiveVeins
       };
     } else if (tabId === 'tab-lighting') {
       return {
@@ -382,14 +778,6 @@ export class HUD {
       };
     } else if (tabId === 'tab-params') {
       return this.getDynamicParams();
-    } else if (tabId === 'tab-flight') {
-      return {
-        flightSpeed: this.settings.flightSpeed,
-        headlampIntensity: this.settings.headlampIntensity,
-        headlamp: this.settings.headlamp ? 1 : 0,
-        adaptiveSpeed: this.settings.adaptiveSpeed ? 1 : 0,
-        wallCushion: this.settings.wallCushion ? 1 : 0
-      };
     }
     return {};
   }
@@ -398,12 +786,13 @@ export class HUD {
     if (tabId === 'tab-optics') {
       if (values.focalDistance !== undefined) this.setRangeValue('param-focal-dist', 'val-focal-dist', this.settings.focalDistance = values.focalDistance);
       if (values.aperture !== undefined) this.setRangeValue('param-aperture', 'val-aperture', this.settings.aperture = values.aperture);
-      if (values.ior !== undefined) this.setRangeValue('param-ior', 'val-ior', this.settings.ior = values.ior);
-      if (values.dispersion !== undefined) this.setRangeValue('param-dispersion', 'val-dispersion', this.settings.dispersion = values.dispersion);
-      if (values.subsurface !== undefined) this.setRangeValue('param-sss', 'val-sss', this.settings.subsurface = values.subsurface);
-      if (values.emissiveVeins !== undefined) this.setRangeValue('param-emissive', 'val-emissive', this.settings.emissiveVeins = values.emissiveVeins);
       if (values.bloomIntensity !== undefined) this.setRangeValue('param-bloom', 'val-bloom', this.settings.bloomIntensity = values.bloomIntensity);
       if (values.exposure !== undefined) this.setRangeValue('param-exposure', 'val-exposure', this.settings.exposure = values.exposure);
+    } else if (tabId === 'tab-materials') {
+      if (values.ior !== undefined) this.setRangeValue('param-mat-ior', 'val-mat-ior', this.settings.ior = values.ior);
+      if (values.dispersion !== undefined) this.setRangeValue('param-mat-dispersion', 'val-mat-dispersion', this.settings.dispersion = values.dispersion);
+      if (values.subsurface !== undefined) this.setRangeValue('param-mat-sss', 'val-mat-sss', this.settings.subsurface = values.subsurface);
+      if (values.emissiveVeins !== undefined) this.setRangeValue('param-mat-emissive', 'val-mat-emissive', this.settings.emissiveVeins = values.emissiveVeins);
     } else if (tabId === 'tab-lighting') {
       if (values.sunIntensity !== undefined) this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity = values.sunIntensity);
       if (values.rimIntensity !== undefined) this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity = values.rimIntensity);
@@ -415,19 +804,19 @@ export class HUD {
       if (values.fogDensity !== undefined) this.setRangeValue('param-fog', 'val-fog', this.settings.fogDensity = values.fogDensity);
       if (values.godraysIntensity !== undefined) this.setRangeValue('param-godrays', 'val-godrays', this.settings.godraysIntensity = values.godraysIntensity);
     } else if (tabId === 'tab-params') {
+      // Only apply keys that belong to the active formula's parameters. Writing other keys
+      // (lighting, optics...) into dynamicParamValues would shadow live slider values in getAllValues().
+      const paramIds = new Set(this.getActiveFormula().params.map(p => p.id));
       for (const [key, val] of Object.entries(values)) {
+        if (!paramIds.has(key)) continue;
+        this.dynamicParamValues[key] = val;
         const input = document.getElementById(`dyn-param-${key}`) as HTMLInputElement;
         const disp = document.getElementById(`dyn-val-${key}`);
         if (input) input.value = String(val);
-        if (disp) disp.textContent = val.toFixed(2);
-      }
-    } else if (tabId === 'tab-flight') {
-      if (values.flightSpeed !== undefined) this.setRangeValue('param-flight-speed', 'val-flight-speed', this.settings.flightSpeed = values.flightSpeed);
-      if (values.headlampIntensity !== undefined) this.setRangeValue('param-headlamp-intensity', 'val-headlamp-intensity', this.settings.headlampIntensity = values.headlampIntensity);
-      if (values.headlamp !== undefined) {
-        const el = document.getElementById('param-headlamp') as HTMLInputElement;
-        if (el) el.checked = Boolean(values.headlamp);
-        this.settings.headlamp = Boolean(values.headlamp);
+        if (disp) {
+          const isInt = this.getActiveFormula().params.find(p => p.id === key)?.type === 'int';
+          disp.textContent = isInt ? Math.round(val).toString() : val.toFixed(3);
+        }
       }
     }
   }
@@ -435,8 +824,13 @@ export class HUD {
   private setRangeValue(id: string, dispId: string, val: number, suffix = '') {
     const el = document.getElementById(id) as HTMLInputElement;
     const disp = document.getElementById(dispId);
-    if (el) el.value = String(val);
-    if (disp) disp.textContent = val.toFixed(2) + suffix;
+    if (el) {
+      el.value = String(val);
+    }
+    if (disp) {
+      const decimals = suffix === '°' ? 1 : (Math.abs(val) < 0.1 ? 3 : 2);
+      disp.textContent = val.toFixed(decimals) + suffix;
+    }
   }
 
   public saveTabDefaults(tabId: string, btn?: HTMLButtonElement) {
@@ -461,6 +855,71 @@ export class HUD {
     }
   }
 
+  public async copyTabSettings(tabId: string, btn?: HTMLButtonElement) {
+    const vals = this.getTabValues(tabId);
+    const text = JSON.stringify(vals, null, 2);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (btn) {
+        const origText = btn.innerHTML;
+        btn.innerHTML = `<span>Copied ✓</span>`;
+        btn.classList.add('saved-active');
+        setTimeout(() => {
+          btn.innerHTML = origText;
+          btn.classList.remove('saved-active');
+        }, 1800);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  public async pasteTabSettings(tabId: string, btn?: HTMLButtonElement) {
+    try {
+      let text = '';
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        text = await navigator.clipboard.readText();
+      } else {
+        const promptVal = prompt('Paste JSON settings:');
+        if (promptVal) text = promptVal;
+      }
+      if (!text) return;
+      const data = JSON.parse(text);
+      if (typeof data === 'object' && data !== null) {
+        this.applyTabValues(tabId, data);
+        this.onSettingChange?.();
+        if (btn) {
+          const origText = btn.innerHTML;
+          btn.innerHTML = `<span>Pasted ✓</span>`;
+          btn.classList.add('saved-active');
+          setTimeout(() => {
+            btn.innerHTML = origText;
+            btn.classList.remove('saved-active');
+          }, 1800);
+        }
+      }
+    } catch {
+      if (btn) {
+        const origText = btn.innerHTML;
+        btn.innerHTML = `<span style="color:#ef4444">Invalid</span>`;
+        setTimeout(() => {
+          btn.innerHTML = origText;
+        }, 1500);
+      }
+    }
+  }
+
   public resetTabDefaults(tabId: string) {
     const key = tabId === 'tab-params'
       ? `fractal_v2_defaults_formula_${this.getActiveFormula().id}`
@@ -469,13 +928,13 @@ export class HUD {
     try {
       localStorage.removeItem(key);
       if (tabId === 'tab-optics') {
-        this.applyTabValues('tab-optics', { focalDistance: 2.35, aperture: 0.0, ior: 1.45, dispersion: 0.0, subsurface: 0.2, emissiveVeins: 0.0, bloomIntensity: 0.25, exposure: 1.0 });
+        this.applyTabValues('tab-optics', { focalDistance: 2.35, aperture: 0.0, bloomIntensity: 0.25, exposure: 1.0 });
+      } else if (tabId === 'tab-materials') {
+        this.applyTabValues('tab-materials', { ior: 1.45, dispersion: 0.0, subsurface: 0.2, emissiveVeins: 0.0 });
       } else if (tabId === 'tab-lighting') {
         this.applyTabValues('tab-lighting', { sunIntensity: 1.0, rimIntensity: 0.32, rimElevation: 30, fillIntensity: 0.38, glowIntensity: 0.35, lightAzimuth: 45, lightElevation: 48, fogDensity: 0.03, godraysIntensity: 0.0 });
       } else if (tabId === 'tab-params') {
         this.populateFormulaParams();
-      } else if (tabId === 'tab-flight') {
-        this.applyTabValues('tab-flight', { flightSpeed: 0.6, headlampIntensity: 1.5, headlamp: 1, adaptiveSpeed: 1, wallCushion: 1 });
       }
       this.onSettingChange?.();
     } catch {
@@ -488,11 +947,11 @@ export class HUD {
       const optics = localStorage.getItem('fractal_v2_defaults_tab-optics');
       if (optics) Object.assign(this.settings, JSON.parse(optics));
 
+      const materials = localStorage.getItem('fractal_v2_defaults_tab-materials');
+      if (materials) Object.assign(this.settings, JSON.parse(materials));
+
       const lighting = localStorage.getItem('fractal_v2_defaults_tab-lighting');
       if (lighting) Object.assign(this.settings, JSON.parse(lighting));
-
-      const flight = localStorage.getItem('fractal_v2_defaults_tab-flight');
-      if (flight) Object.assign(this.settings, JSON.parse(flight));
     } catch {
       // Ignore
     }
@@ -502,7 +961,7 @@ export class HUD {
     const formulaPopover = document.getElementById('formula-popover')!;
     const palettePopover = document.getElementById('palette-popover')!;
     const btnFormulaSelect = document.getElementById('btn-select-formula')!;
-    const btnPaletteSelect = document.getElementById('btn-select-palette')!;
+    const btnPaletteSelect = document.getElementById('btn-select-palette');
     const btnCloseFormula = document.getElementById('btn-close-formula-popover')!;
     const btnClosePalette = document.getElementById('btn-close-palette-popover')!;
 
@@ -532,11 +991,13 @@ export class HUD {
         card.dataset.formulaId = id;
         card.dataset.index = String(idx);
         card.innerHTML = `
-          <div class="card-row-top">
-            <span class="card-num">${idx + 1}.</span>
-            <span class="card-name">${f.name}</span>
-          </div>
-          <div class="card-subtitle">${f.subtitle}</div>
+          <span class="card-text">
+            <span class="card-row-top">
+              <span class="card-num">${idx + 1}.</span>
+              <span class="card-name">${f.name}</span>
+            </span>
+            <span class="card-subtitle">${f.subtitle}</span>
+          </span>
         `;
 
         card.addEventListener('click', () => {
@@ -593,7 +1054,7 @@ export class HUD {
       }
     });
 
-    btnPaletteSelect.addEventListener('click', (e) => {
+    btnPaletteSelect?.addEventListener('click', (e) => {
       e.stopPropagation();
       const isClosed = palettePopover.classList.contains('closed');
       this.closeAllPopovers();
@@ -649,9 +1110,26 @@ export class HUD {
     });
   }
 
-  public selectFormula(index: number) {
+  private updateGlyphs() {
+    const f = this.getActiveFormula();
+    const glyph = document.getElementById('formula-glyph');
+    if (glyph) glyph.innerHTML = formulaGlyphSVG(f.id, this.activeFormulaIndex);
+    this.updatePaletteSwatch();
+  }
+
+  private updatePaletteSwatch() {
+    const sw = document.getElementById('palette-swatch');
+    if (sw) sw.style.background = paletteGradientCSS(this.currentPalette);
+  }
+
+  public selectFormula(index: number, fromTour = false) {
+    // Manually switching formula pauses the auto-play tour
+    if (!fromTour && (this.tourActive || this.keyframeEngine.isPlaying)) {
+      this.stopTour();
+    }
     this.activeFormulaIndex = index;
     const f = this.getActiveFormula();
+    this.updateGlyphs();
     const labelFormula = document.getElementById('current-formula-label');
     if (labelFormula) {
       labelFormula.textContent = `${this.activeFormulaIndex + 1}. ${f.name}`;
@@ -663,21 +1141,162 @@ export class HUD {
     }
 
     this.updatePopoverActiveStates();
+    this.selectedKeyframeId = null;
     this.populateFormulaParams();
-    this.refreshAllKeyframeTracks();
-    this.onFormulaChange?.(f);
+    this.refreshGlobalKeyframeTrack();
+    this.onFormulaChange?.(f, fromTour);
   }
 
   public selectPalette(index: number) {
     this.activePaletteIndex = index;
-    const pal = this.getActivePalette();
+    const pal = PALETTES[index] || PALETTES[0];
+    this.currentPalette = {
+      id: pal.id,
+      name: pal.name,
+      a: [...pal.a],
+      b: [...pal.b],
+      c: [...pal.c],
+      d: [...pal.d]
+    };
+
     const labelPalette = document.getElementById('current-palette-label');
     if (labelPalette) {
       labelPalette.textContent = pal.name;
     }
 
+    const matDropdown = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
+    if (matDropdown && matDropdown.value !== String(index)) {
+      matDropdown.value = String(index);
+    }
+
     this.updatePopoverActiveStates();
-    this.onPaletteChange?.(pal);
+    this.updatePaletteSwatch();
+    this.onPaletteChange?.(this.currentPalette);
+  }
+
+  private activeTween: number | null = null;
+
+  public transitionToGlobalKeyframe(
+    targetKf: Keyframe,
+    durationSec: number = 0.75
+  ) {
+    if (this.activeTween !== null) {
+      cancelAnimationFrame(this.activeTween);
+      this.activeTween = null;
+    }
+
+    const startCam: CameraSnapshot = this.getCameraSnapshot
+      ? this.getCameraSnapshot()
+      : { pos: [0, 0, 2.5], target: [0, 0, 0], up: [0, 1, 0], orbitRadius: 2.5 };
+    const targetCam = targetKf.camera;
+
+    const startPal = { ...this.getActivePalette() };
+    const targetPal = targetKf.palette;
+
+    const startValues = this.getAllValues();
+    const targetValues = targetKf.values;
+
+    const startTime = performance.now();
+
+    const step = (now: number) => {
+      const elapsedSec = (now - startTime) / 1000.0;
+      const rawT = Math.min(1.0, elapsedSec / durationSec);
+      // Silky cosine ease for zero initial and final velocity without sluggishness
+      const t = 0.5 * (1.0 - Math.cos(Math.PI * rawT));
+
+      // 1. Camera geodesic arc interpolation around target (no cutting through center)
+      const curTarget: [number, number, number] = [
+        startCam.target[0] + (targetCam.target[0] - startCam.target[0]) * t,
+        startCam.target[1] + (targetCam.target[1] - startCam.target[1]) * t,
+        startCam.target[2] + (targetCam.target[2] - startCam.target[2]) * t
+      ];
+
+      const sDir: [number, number, number] = [
+        startCam.pos[0] - startCam.target[0],
+        startCam.pos[1] - startCam.target[1],
+        startCam.pos[2] - startCam.target[2]
+      ];
+      const tDir: [number, number, number] = [
+        targetCam.pos[0] - targetCam.target[0],
+        targetCam.pos[1] - targetCam.target[1],
+        targetCam.pos[2] - targetCam.target[2]
+      ];
+      const sLen = Math.hypot(...sDir) || 1.0;
+      const tLen = Math.hypot(...tDir) || 1.0;
+      const u1: [number, number, number] = [sDir[0] / sLen, sDir[1] / sLen, sDir[2] / sLen];
+      const u2: [number, number, number] = [tDir[0] / tLen, tDir[1] / tLen, tDir[2] / tLen];
+
+      const curDir = slerpVec3(u1, u2, t);
+      const curRadius = startCam.orbitRadius + (targetCam.orbitRadius - startCam.orbitRadius) * t;
+      const curUp = slerpVec3(startCam.up, targetCam.up, t);
+
+      const curCam: CameraSnapshot = {
+        pos: [
+          curTarget[0] + curDir[0] * curRadius,
+          curTarget[1] + curDir[1] * curRadius,
+          curTarget[2] + curDir[2] * curRadius
+        ],
+        target: curTarget,
+        up: curUp,
+        orbitRadius: curRadius
+      };
+      this.onApplyKeyframeCamera?.(curCam);
+
+      // 2. Continuous direct Palette Vector interpolation (a, b, c, d)
+      // Directly interpolates from Material 1 to Material 4 WITHOUT cycling through 2 and 3!
+      const curPal: PalettePreset = {
+        id: t < 0.5 ? startPal.id : targetPal.id,
+        name: t < 0.5 ? startPal.name : targetPal.name,
+        a: [
+          startPal.a[0] + (targetPal.a[0] - startPal.a[0]) * t,
+          startPal.a[1] + (targetPal.a[1] - startPal.a[1]) * t,
+          startPal.a[2] + (targetPal.a[2] - startPal.a[2]) * t
+        ],
+        b: [
+          startPal.b[0] + (targetPal.b[0] - startPal.b[0]) * t,
+          startPal.b[1] + (targetPal.b[1] - startPal.b[1]) * t,
+          startPal.b[2] + (targetPal.b[2] - startPal.b[2]) * t
+        ],
+        c: [
+          startPal.c[0] + (targetPal.c[0] - startPal.c[0]) * t,
+          startPal.c[1] + (targetPal.c[1] - startPal.c[1]) * t,
+          startPal.c[2] + (targetPal.c[2] - startPal.c[2]) * t
+        ],
+        d: [
+          startPal.d[0] + (targetPal.d[0] - startPal.d[0]) * t,
+          startPal.d[1] + (targetPal.d[1] - startPal.d[1]) * t,
+          startPal.d[2] + (targetPal.d[2] - startPal.d[2]) * t
+        ]
+      };
+
+      // 3. Values interpolation across all tabs
+      const curValues: Record<string, number> = {};
+      const allKeys = new Set([...Object.keys(startValues), ...Object.keys(targetValues)]);
+      for (const k of allKeys) {
+        const sv = startValues[k] ?? targetValues[k] ?? 0;
+        const tv = targetValues[k] ?? sv;
+        curValues[k] = sv + (tv - sv) * t;
+      }
+
+      const activePalIdx = t < 0.5 ? this.activePaletteIndex : targetKf.paletteIndex;
+      this.applyAllValues(curValues, curPal, activePalIdx);
+      this.onSettingChange?.();
+
+      if (rawT < 1.0) {
+        this.activeTween = requestAnimationFrame(step);
+      } else {
+        this.activeTween = null;
+        this.activePaletteIndex = targetKf.paletteIndex;
+        this.currentPalette = { ...targetPal };
+        const label = document.getElementById('current-palette-label');
+        if (label) label.textContent = targetPal.name;
+        const select = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
+        if (select) select.value = String(targetKf.paletteIndex);
+        this.updatePopoverActiveStates();
+      }
+    };
+
+    this.activeTween = requestAnimationFrame(step);
   }
 
   private bindRange(id: string, displayId: string, setter: (val: number) => void, suffix = '') {
@@ -685,12 +1304,36 @@ export class HUD {
     const disp = document.getElementById(displayId);
     if (!el || !disp) return;
 
+    el.step = 'any';
+    const min = parseFloat(el.min) || 0.0;
+    const max = parseFloat(el.max) || 100.0;
+
+    const updateDisplay = (val: number) => {
+      const decimals = suffix === '°' ? 1 : 3;
+      disp.textContent = val.toFixed(decimals) + suffix;
+    };
+
     el.addEventListener('input', () => {
       const val = parseFloat(el.value);
-      disp.textContent = val.toFixed(2) + suffix;
+      updateDisplay(val);
       setter(val);
       this.onSettingChange?.();
     });
+
+    // Mouse wheel fine-step control (Shift for 5x fine micro-tuning)
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 1 : -1;
+      const span = max - min;
+      const baseStep = Math.max(0.001, span * 0.005);
+      const stepSize = e.shiftKey ? baseStep * 0.2 : baseStep;
+      const curVal = parseFloat(el.value);
+      const nextVal = Math.max(min, Math.min(max, curVal + delta * stepSize));
+      el.value = String(nextVal);
+      updateDisplay(nextVal);
+      setter(nextVal);
+      this.onSettingChange?.();
+    }, { passive: false });
   }
 
   public populateFormulaParams() {
@@ -710,49 +1353,97 @@ export class HUD {
 
     for (const p of formula.params) {
       const currentVal = savedFormulaValues[p.id] ?? p.default;
+      this.dynamicParamValues[p.id] = currentVal;
+      const isInt = p.type === 'int';
+      const stepAttr = isInt ? '1' : 'any';
+      const decimals = isInt ? 0 : 3;
+
       const row = document.createElement('div');
       row.className = 'control-row';
       row.innerHTML = `
         <label>${p.name}</label>
-        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${currentVal}" id="dyn-param-${p.id}" class="studio-slider">
-        <span class="val-display" id="dyn-val-${p.id}">${currentVal.toFixed(2)}</span>
+        <input type="range" min="${p.min}" max="${p.max}" step="${stepAttr}" value="${currentVal}" id="dyn-param-${p.id}" class="studio-slider">
+        <span class="val-display" id="dyn-val-${p.id}">${isInt ? Math.round(currentVal).toString() : currentVal.toFixed(decimals)}</span>
       `;
       container.appendChild(row);
 
       const input = row.querySelector('input')!;
       const valDisp = row.querySelector('.val-display')!;
+
       input.addEventListener('input', () => {
         const v = parseFloat(input.value);
-        valDisp.textContent = v.toFixed(2);
+        this.dynamicParamValues[p.id] = v;
+        valDisp.textContent = isInt ? Math.round(v).toString() : v.toFixed(decimals);
         this.onSettingChange?.();
       });
+
+      // Mouse wheel fine-tuning on formula parameter sliders
+      input.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 1 : -1;
+        const span = p.max - p.min;
+        const baseStep = isInt ? 1 : Math.max(0.001, span * 0.005);
+        const stepSize = isInt ? 1 : (e.shiftKey ? baseStep * 0.2 : baseStep);
+        const curVal = this.dynamicParamValues[p.id] ?? parseFloat(input.value);
+        const nextVal = Math.max(p.min, Math.min(p.max, curVal + delta * stepSize));
+        this.dynamicParamValues[p.id] = nextVal;
+        input.value = String(nextVal);
+        valDisp.textContent = isInt ? Math.round(nextVal).toString() : nextVal.toFixed(decimals);
+        this.onSettingChange?.();
+      }, { passive: false });
     }
   }
 
   public getDynamicParams(): Record<string, number> {
-    const params: Record<string, number> = {};
-    for (const p of this.getActiveFormula().params) {
-      const el = document.getElementById(`dyn-param-${p.id}`) as HTMLInputElement;
-      params[p.id] = el ? parseFloat(el.value) : p.default;
-    }
-    return params;
+    return { ...this.dynamicParamValues };
   }
 
-  public updateStats(fps: number, sampleCount: number) {
+  public updateStats(fps: number, _sampleCount: number) {
     const fpsCounter = document.getElementById('fps-counter');
     if (fpsCounter) fpsCounter.textContent = Math.round(fps).toString();
-
-    const accumPill = document.getElementById('accum-samples-pill');
-    if (accumPill) {
-      if (this.settings.progressiveAccumulation) {
-        accumPill.textContent = `${sampleCount} Spp (Accumulated)`;
-      } else {
-        accumPill.textContent = 'Interactive';
-      }
-    }
   }
 }
 
 function clamp01(x: number): number {
   return Math.max(0.0, Math.min(1.0, x));
+}
+
+/** Deterministic pictorial emblem per formula: nested, twisting polygons tinted by its list position. */
+export function formulaGlyphSVG(id: string, index: number): string {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h = h >>> 0;
+  const sides = 3 + (h % 6);
+  const twist = 0.12 + ((h >>> 8) % 40) / 100;
+  const hue = (index * 37 + 200) % 360;
+  let paths = '';
+  const layers = 6;
+  for (let l = 0; l < layers; l++) {
+    const r = 17 * Math.pow(0.82, l);
+    const rot = l * twist + ((h >>> 16) % 628) / 100;
+    const pts: string[] = [];
+    for (let s = 0; s < sides; s++) {
+      const a = rot + (s / sides) * Math.PI * 2;
+      pts.push(`${(20 + r * Math.cos(a)).toFixed(2)},${(20 + r * Math.sin(a)).toFixed(2)}`);
+    }
+    const light = 70 - l * 6;
+    paths += `<polygon points="${pts.join(' ')}" fill="hsla(${hue},70%,${light}%,${0.06 + l * 0.02})" ` +
+      `stroke="hsl(${hue},75%,${light}%)" stroke-width="1" stroke-opacity="${1 - l * 0.12}"/>`;
+  }
+  return `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">${paths}` +
+    `<circle cx="20" cy="20" r="1.4" fill="hsl(${hue},80%,80%)"/></svg>`;
+}
+
+function paletteGradientCSS(pal: PalettePreset): string {
+  const twoPi = 6.2831853;
+  const stops: string[] = [];
+  for (let i = 0; i <= 4; i++) {
+    const t = 0.1 + (i / 4) * 0.8;
+    const ch = (k: number) => Math.round(clamp01(pal.a[k] + pal.b[k] * Math.cos(twoPi * (pal.c[k] * t + pal.d[k]))) * 255);
+    stops.push(`rgb(${ch(0)},${ch(1)},${ch(2)})`);
+  }
+  return `linear-gradient(135deg, ${stops.join(', ')})`;
 }
