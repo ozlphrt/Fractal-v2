@@ -91,38 +91,38 @@ export interface FormulaGroup {
 export const FORMULA_GROUPS: FormulaGroup[] = [
   {
     name: 'Spherical & Bulbs',
-    badge: '🔮 Bulbs',
+    badge: 'SPH',
     ids: ['mandelbulb', 'juliabulb', 'helix_bulb']
   },
   {
-    name: 'Polyhedral & Kleinian',
-    badge: '💎 Kleinian',
-    ids: ['kalibox', 'pseudo_kleinian']
+    name: 'Kleinian & Gothic Architecture',
+    badge: 'KLE',
+    ids: ['pseudo_kleinian', 'cathedral']
   },
   {
     name: 'Cubic Lattices',
-    badge: '🧊 Cubes',
+    badge: 'CUB',
     ids: ['jerusalem', 'twist_cube', 'vault_cube', 'menger']
   },
   {
     name: 'Hypercomplex 4D Julia',
-    badge: '🌌 4D Julia',
+    badge: '4D',
     ids: ['quat_julia', 'ribbon_julia', 'quartz_julia']
   },
   {
-    name: 'Origami & Reflection Folds',
-    badge: '📐 Origami',
-    ids: ['kifs', 'tetra']
+    name: 'Mandelbox, Kali & Origami Folds',
+    badge: 'FLD',
+    ids: ['kalibox', 'kifs', 'tetra']
   },
   {
     name: 'Apollonian Sphere Gaskets',
-    badge: '🫧 Gaskets',
+    badge: 'APO',
     ids: ['apollonian', 'pearl_gasket', 'lace_gasket']
   },
   {
-    name: 'Non-Analytic & Gothic',
-    badge: '🏛️ Gothic',
-    ids: ['burning_ship', 'wind_ship', 'cathedral']
+    name: 'Non-Analytic Abs Folds',
+    badge: 'ABS',
+    ids: ['burning_ship', 'wind_ship']
   }
 ];
 
