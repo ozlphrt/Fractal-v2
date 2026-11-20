@@ -61,57 +61,56 @@ ${COMMON_GLSL}
 // Injected formula distance estimator
 ${formula.glslDE}
 
-// Normal calculation via tetrahedron gradient
-vec3 calcNormal(vec3 pos) {
-    const vec2 e = vec2(1.0, -1.0) * 0.0008;
+// Macroscopic 4-tap Tetrahedron Normal (Analytic gradient, zero micro-grit flickering)
+vec3 calcNormal(vec3 p, float eps) {
+    const vec2 k = vec2(1.0, -1.0);
     vec4 t;
     return normalize(
-        e.xyy * mapFractal(pos + e.xyy, t) +
-        e.yyx * mapFractal(pos + e.yyx, t) +
-        e.yxy * mapFractal(pos + e.yxy, t) +
-        e.xxx * mapFractal(pos + e.xxx, t)
+        k.xyy * mapFractal(p + k.xyy * eps, t) +
+        k.yyx * mapFractal(p + k.yyx * eps, t) +
+        k.yxy * mapFractal(p + k.yxy * eps, t) +
+        k.xxx * mapFractal(p + k.xxx * eps, t)
     );
 }
 
-// Soft shadow calculation
+// Continuous soft shadow with penumbra
 float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     float res = 1.0;
     float t = mint;
     vec4 trap;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 24; i++) {
         if (t >= maxt) break;
         float h = mapFractal(ro + rd * t, trap);
-        if (h < 0.0004) return 0.0;
+        if (h < 0.0005) return 0.0;
         res = min(res, k * h / t);
-        t += clamp(h, 0.002, 0.08);
+        t += clamp(h * 0.85, 0.015, 0.25);
     }
     return clamp(res, 0.0, 1.0);
 }
 
-// Ambient occlusion calculation
+// Ambient occlusion with multi-step radius filtering
 float calcAO(vec3 pos, vec3 nor) {
     float occ = 0.0;
     float sca = 1.0;
     vec4 trap;
-    for (int i = 0; i < 5; i++) {
-        float h = 0.005 + 0.03 * float(i);
+    for (int i = 0; i < 4; i++) {
+        float h = 0.02 + 0.12 * float(i);
         float d = mapFractal(pos + h * nor, trap);
-        occ += (h - d) * sca;
-        sca *= 0.85;
+        occ += max(0.0, h - d) * sca;
+        sca *= 0.75;
     }
-    return clamp(1.0 - 2.5 * occ, 0.0, 1.0);
+    return clamp(1.0 - 2.0 * occ, 0.0, 1.0);
 }
 
 // Primary Raymarcher
 void main() {
     // Screen coordinates with sub-pixel jitter
-    vec2 p = (gl_FragCoord.xy + u_jitter - 0.5 * u_resolution) / u_resolution.y;
+    vec2 p = (gl_FragCoord.xy + u_jitter - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
 
     // Camera basis vectors
     vec3 cw = normalize(u_camTarget - u_camPos);
-    vec3 cp = u_camUp;
-    vec3 cu = normalize(cross(cw, cp));
-    vec3 cv = normalize(cross(cu, cw));
+    vec3 cu = normalize(cross(cw, u_camUp));
+    vec3 cv = cross(cu, cw);
 
     // Focal plane & Thin-lens Depth of Field (DoF) Bokeh
     vec3 primaryDir = normalize(p.x * cu + p.y * cv + 1.8 * cw);
@@ -123,96 +122,114 @@ void main() {
     vec3 rayDir = normalize(focalPoint - rayOrigin);
 
     // Primary raymarch traversal
-    float t = 0.01;
-    float maxDist = 20.0;
-    vec4 trap = vec4(0.0);
+    float t = 0.05;
+    float maxDist = 12.0;
+    vec4 trap = vec4(100.0);
+    vec4 finalTrap = vec4(0.0);
     bool hit = false;
     vec3 hitPos = vec3(0.0);
     float glow = 0.0;
     float godrays = 0.0;
 
-    for (int i = 0; i < 110; i++) {
+    for (int i = 0; i < 140; i++) {
+        if (t > maxDist) break;
         vec3 currPos = rayOrigin + rayDir * t;
         float d = mapFractal(currPos, trap);
 
-        // Volumetric step accumulation (inner ethereal glow)
-        glow += 0.0015 / (0.015 + d * d);
+        // Subtle, bounded volumetric glow near surface boundaries
+        float g = max(0.0, 1.0 - d * 2.8);
+        glow += g * g;
 
-        // Volumetric light shafts (God rays)
+        // Soft volumetric god rays
         if (u_godraysIntensity > 0.01) {
             float lightAlign = dot(rayDir, u_lightDir);
             float phase = henyeyGreenstein(lightAlign, 0.65);
-            godrays += phase * exp(-t * u_fogDensity * 0.8) * 0.002 * u_godraysIntensity;
+            godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.001 * u_godraysIntensity;
         }
 
-        if (d < 0.0005 * t) {
+        float hitThresh = 0.0006 * (1.0 + t * 0.02);
+        if (d < hitThresh) {
+            // Hit refinement step to eliminate chatter
+            t += d * 0.5;
             hit = true;
-            hitPos = currPos;
+            hitPos = rayOrigin + rayDir * t;
+            finalTrap = trap;
             break;
         }
-        t += d * 0.85;
-        if (t > maxDist) break;
+        // Conservative 0.68x ray stepping to eliminate grazing lattice overshoots
+        t += max(hitThresh * 0.4, d * 0.68);
     }
 
     vec3 sceneColor = vec3(0.0);
 
     if (hit) {
-        vec3 nor = calcNormal(hitPos);
+        // Macroscopic curvature normal: filters out chaotic sub-pixel micro-grit
+        float normEps = max(0.0028, t * 0.0012);
+        vec3 nor = calcNormal(hitPos, normEps);
         vec3 viewDir = -rayDir;
         
         // PBR & Cosine Palette Surface Coloring
-        float orbitCoord = clamp(length(trap.xyz) * 0.45 + trap.w * 0.15, 0.0, 1.0);
+        float orbitCoord = clamp(finalTrap.y * 1.8 + finalTrap.z * 0.6, 0.0, 1.0);
         vec3 albedo = cosinePalette(orbitCoord, u_palA, u_palB, u_palC, u_palD);
+        albedo = clamp(albedo, 0.0, 1.0);
 
-        // Diffuse & Direct Specular (GGX-like)
-        float diff = max(dot(nor, u_lightDir), 0.0);
+        // Diffuse & Specular Lighting
+        float diff = clamp(dot(nor, u_lightDir), 0.0, 1.0);
         vec3 halfVec = normalize(u_lightDir + viewDir);
-        float spec = pow(max(dot(nor, halfVec), 0.0), 32.0);
+        float spec = pow(clamp(dot(nor, halfVec), 0.0, 1.0), 32.0);
 
         // Shadows & AO
-        float shadow = calcShadow(hitPos + nor * 0.002, u_lightDir, 0.01, 4.0, 16.0);
+        float shadow = (diff > 0.01) ? calcShadow(hitPos + nor * max(0.012, normEps * 3.0), u_lightDir, 0.02, 3.5, 12.0) : 0.0;
         float ao = calcAO(hitPos, nor);
 
-        // Fresnel term
+        // Subtle crevice weathering
+        albedo = mix(albedo * 0.6, albedo, smoothstep(0.1, 0.9, ao));
+
+        // Fresnel reflection
         float fresnel = pow(clamp(1.0 - dot(viewDir, nor), 0.0, 1.0), 4.0);
 
         // Subsurface Scattering (SSS) approximation
-        float sss = smoothstep(0.0, 0.2, mapFractal(hitPos + u_lightDir * 0.1, trap)) * u_subsurface;
+        vec4 sssTrap;
+        float sss = smoothstep(0.0, 0.15, mapFractal(hitPos + u_lightDir * 0.08, sssTrap)) * u_subsurface * 0.3;
 
-        // Emissive Orbit Trap Veins
-        vec3 emissive = albedo * pow(clamp(1.0 - trap.w, 0.0, 1.0), 4.0) * u_emissiveVeins;
+        // Subtle emissive veins from orbit trap
+        float veinMask = pow(clamp(1.0 - finalTrap.y * 2.5, 0.0, 1.0), 4.0);
+        vec3 emissive = albedo * veinMask * u_emissiveVeins * 0.4;
 
         // Assemble PBR surface lighting
-        vec3 ambient = vec3(0.03, 0.04, 0.07) * albedo * ao;
-        vec3 direct = (diff * shadow + sss) * albedo * vec3(1.2, 1.15, 1.0);
-        vec3 specularLight = spec * shadow * vec3(1.0, 0.95, 0.9);
+        vec3 ambient = vec3(0.04, 0.05, 0.08) * albedo * ao;
+        vec3 direct = (diff * shadow + sss) * albedo * vec3(1.1, 1.05, 0.95);
+        vec3 specularLight = spec * shadow * vec3(0.9, 0.88, 0.85);
 
         // Chromatic dispersion transmission
         if (u_dispersion > 0.001) {
             vec3 refractR = refract(rayDir, nor, 1.0 / (u_ior - u_dispersion));
             vec3 refractG = refract(rayDir, nor, 1.0 / u_ior);
             vec3 refractB = refract(rayDir, nor, 1.0 / (u_ior + u_dispersion));
-            direct.r += max(dot(refractR, u_lightDir), 0.0) * 0.3;
-            direct.g += max(dot(refractG, u_lightDir), 0.0) * 0.3;
-            direct.b += max(dot(refractB, u_lightDir), 0.0) * 0.3;
+            direct.r += max(dot(refractR, u_lightDir), 0.0) * 0.15;
+            direct.g += max(dot(refractG, u_lightDir), 0.0) * 0.15;
+            direct.b += max(dot(refractB, u_lightDir), 0.0) * 0.15;
         }
 
-        sceneColor = ambient + direct + specularLight + emissive + fresnel * 0.4;
+        sceneColor = ambient + direct + specularLight + emissive + fresnel * 0.25;
 
         // Volumetric distance fog
         float fogFactor = 1.0 - exp(-t * u_fogDensity);
-        vec3 fogColor = vec3(0.02, 0.03, 0.06);
+        vec3 fogColor = vec3(0.015, 0.025, 0.045);
         sceneColor = mix(sceneColor, fogColor, fogFactor);
 
     } else {
-        // Deep cosmos background with subtle directional light gradient
-        float sunHighlight = pow(max(dot(rayDir, u_lightDir), 0.0), 8.0);
-        sceneColor = vec3(0.015, 0.02, 0.035) + vec3(0.12, 0.1, 0.08) * sunHighlight;
+        // Celestial deep midnight space background with subtle sun glow
+        float sunHighlight = pow(max(dot(rayDir, u_lightDir), 0.0), 16.0);
+        vec3 skyTop = vec3(0.012, 0.018, 0.035);
+        vec3 skyBottom = vec3(0.004, 0.006, 0.012);
+        vec3 skyBg = mix(skyBottom, skyTop, clamp(rayDir.y * 0.5 + 0.5, 0.0, 1.0));
+        sceneColor = skyBg + vec3(0.18, 0.15, 0.1) * sunHighlight;
     }
 
-    // Additive volumetric glow and god rays
-    sceneColor += glow * cosinePalette(0.7, u_palA, u_palB, u_palC, u_palD);
-    sceneColor += godrays * vec3(1.0, 0.9, 0.7);
+    // Additive bounded volumetric glow and god rays
+    sceneColor += glow * 0.0015 * cosinePalette(0.65, u_palA, u_palB, u_palC, u_palD);
+    sceneColor += godrays * vec3(0.9, 0.85, 0.75);
 
     fragColor = vec4(sceneColor, 1.0);
 }

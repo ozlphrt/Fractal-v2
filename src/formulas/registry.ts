@@ -62,50 +62,68 @@ export const FORMULAS: Record<string, FormulaDefinition> = {
     glslDE: /* glsl */ `
 float mapFractal(vec3 pos, out vec4 trap) {
     vec3 w = pos;
-    float m = dot(w, w);
     vec4 orbit = vec4(100.0);
     float dz = 1.0;
+    float power = u_mb_power;
+    int maxIt = int(u_mb_iterations);
+    float m = dot(w, w);
     
     for (int i = 0; i < 24; i++) {
-        if (i >= int(u_mb_iterations)) break;
+        if (i >= maxIt) break;
         
-        orbit = min(orbit, vec4(abs(w), m));
-        float m2 = m * m;
-        float m4 = m2 * m2;
-        dz = u_mb_power * pow(m, (u_mb_power - 1.0) * 0.5) * dz + 1.0;
+        float r = sqrt(m);
+        dz = power * pow(r, power - 1.0) * dz + 1.0;
         
-        float r = length(w);
-        float b = u_mb_power * acos(clamp(w.y / max(r, 1e-6), -1.0, 1.0));
-        float a = u_mb_power * atan(w.x, w.z);
-        w = pos + pow(r, u_mb_power) * vec3(sin(b) * sin(a), cos(b), sin(b) * cos(a));
+        float theta = acos(clamp(w.z / max(1e-5, r), -1.0, 1.0));
+        float phi = atan(w.y, w.x);
+        
+        theta *= power;
+        phi *= power;
+        
+        float zr = pow(r, power);
+        w = pos + zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+        
+        orbit.x = min(orbit.x, r);
+        orbit.y = min(orbit.y, abs(sin(theta) * cos(phi)));
+        orbit.z = min(orbit.z, abs(dot(w, vec3(0.577))));
+        orbit.w = min(orbit.w, m);
         
         m = dot(w, w);
-        if (m > 4.0) break;
+        if (m > 8.0) break;
     }
+    
     trap = orbit;
-    return 0.25 * log(m) * sqrt(m) / dz;
+    if (m < 1.0) return 0.0;
+    return 0.25 * log(m) * sqrt(m) / max(1e-4, dz);
 }
 `,
     cpuDE: (pos, params) => {
-      let x = pos[0], y = pos[1], z = pos[2];
-      let dr = 1.0, r = 0.0;
       const power = params.mb_power ?? 8.0;
-      const iters = params.mb_iterations ?? 12;
+      const maxIt = Math.min(16, Math.round(params.mb_iterations ?? 12));
+      let x = pos[0], y = pos[1], z = pos[2];
+      let dz = 1.0;
+      let m = x * x + y * y + z * z;
 
-      for (let i = 0; i < iters; i++) {
-        r = Math.sqrt(x * x + y * y + z * z);
-        if (r > 4.0) break;
-        let theta = Math.acos(Math.max(-1, Math.min(1, y / (r || 1e-6))));
-        let phi = Math.atan2(x, z);
-        dr = Math.pow(r, power - 1.0) * power * dr + 1.0;
+      for (let i = 0; i < maxIt; i++) {
+        const r = Math.sqrt(m);
+        dz = power * Math.pow(r, power - 1.0) * dz + 1.0;
+
+        let theta = Math.acos(Math.max(-1.0, Math.min(1.0, z / Math.max(1e-5, r))));
+        let phi = Math.atan2(y, x);
+
+        theta *= power;
+        phi *= power;
+
         const zr = Math.pow(r, power);
-        theta = theta * power;
-        phi = phi * power;
-        x = zr * Math.sin(theta) * Math.sin(phi) + pos[0];
-        y = zr * Math.cos(theta) + pos[1];
-        z = zr * Math.sin(theta) * Math.cos(phi) + pos[2];
+        x = pos[0] + zr * Math.sin(theta) * Math.cos(phi);
+        y = pos[1] + zr * Math.sin(theta) * Math.sin(phi);
+        z = pos[2] + zr * Math.cos(theta);
+
+        m = x * x + y * y + z * z;
+        if (m > 8.0) break;
       }
-      return 0.5 * Math.log(r || 1e-6) * r / dr;
+      if (m < 1.0) return 0.0;
+      return 0.25 * Math.log(m) * Math.sqrt(m) / Math.max(1e-4, dz);
     }
   },
 
