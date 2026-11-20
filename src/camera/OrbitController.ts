@@ -1,26 +1,23 @@
 // src/camera/OrbitController.ts
-// Heavy physical flywheel orbit controller with continuous 360° unconstrained rotation, viscous drag, and inertial glide
+// Precision Heavy Flywheel Orbit Controller with liquid-smooth exponential damping, 360° unconstrained rotation, and optical-grade zoom
 
 import { Camera } from './Camera.ts';
-import { Vec3 } from '../core/math.ts';
 
 export class OrbitController {
   private camera: Camera;
   private canvas: HTMLCanvasElement;
 
   private isDragging = false;
-  private dragMode: 'orbit' | 'pan' = 'orbit';
   private lastMouseX = 0;
   private lastMouseY = 0;
 
-  // Heavy moment of inertia: angular velocities and pan velocities
-  private velYaw = 0;
-  private velPitch = 0;
-  private panVelX = 0;
-  private panVelY = 0;
+  // Continuous smoothed angular momentum accumulators (Three.js OrbitControls style damping)
+  private accumYaw = 0;
+  private accumPitch = 0;
 
-  // Heavy inertial zoom glide
-  private targetRadius = 2.5;
+  // Zoom state
+  private orbitRadius = 2.5;
+  private targetOrbitRadius = 2.5;
 
   public onChange?: () => void;
 
@@ -32,23 +29,30 @@ export class OrbitController {
     this.bindEvents();
   }
 
+  /**
+   * Firmly anchors the target to the object center (0, 0, 0) and computes initial radial distance.
+   */
   public syncFromCamera() {
-    const offset = this.camera.position.clone().sub(this.camera.target);
-    this.targetRadius = Math.max(0.04, offset.length());
-    this.velYaw = 0;
-    this.velPitch = 0;
-    this.panVelX = 0;
-    this.panVelY = 0;
+    this.camera.target.set(0, 0, 0);
+    const offset = this.camera.position.clone();
+    this.orbitRadius = Math.max(0.04, offset.length());
+    this.targetOrbitRadius = this.orbitRadius;
+    this.accumYaw = 0;
+    this.accumPitch = 0;
   }
 
   /**
    * Continuous 360° unconstrained rotation around camera right and up axes.
-   * Completely eliminates 180° pole walls, allowing infinite vertical & horizontal looping.
+   * Rotation is ALWAYS strictly anchored around the center of the object (0, 0, 0).
    */
   public rotateOrbit(dYaw: number, dPitch: number) {
-    const offset = this.camera.position.clone().sub(this.camera.target);
+    // Ensure target is strictly locked to object center
+    this.camera.target.set(0, 0, 0);
+
+    // Vector from object center (0,0,0) to camera position
+    const offset = this.camera.position.clone();
     const radius = Math.max(0.02, offset.length());
-    const forward = offset.clone().normalize().scale(-1.0); // pointing towards target
+    const forward = offset.clone().normalize().scale(-1.0); // pointing towards center
     
     // Right vector is perpendicular to forward and camera up
     const right = forward.clone().cross(this.camera.up).normalize();
@@ -56,7 +60,7 @@ export class OrbitController {
       right.set(1, 0, 0);
     }
 
-    // 1. Pitch: Vertical 360° rotation around camera right axis (no clamping, loops infinitely)
+    // 1. Pitch: Vertical 360° rotation around camera right axis (no clamping, loops infinitely over poles)
     if (Math.abs(dPitch) > 1e-7) {
       offset.applyAxisAngle(right, -dPitch);
       this.camera.up.applyAxisAngle(right, -dPitch).normalize();
@@ -67,41 +71,19 @@ export class OrbitController {
       offset.applyAxisAngle(this.camera.up, -dYaw);
     }
 
-    // Preserve current zoom distance
+    // Preserve exact radial distance from object center
     offset.normalize().scale(radius);
-    this.camera.position.copy(this.camera.target).add(offset);
-    this.onChange?.();
-  }
-
-  private applyPan(dx: number, dy: number) {
-    const offset = this.camera.position.clone().sub(this.camera.target);
-    const forward = offset.clone().normalize().scale(-1.0);
-    const right = forward.clone().cross(this.camera.up).normalize();
-    const up = this.camera.up.clone().normalize();
-    const panFactor = Math.max(0.05, offset.length()) * 0.0012;
-
-    const panOffset = new Vec3()
-      .addScaled(right, -dx * panFactor)
-      .addScaled(up, dy * panFactor);
-
-    this.camera.target.add(panOffset);
-    this.camera.position.add(panOffset);
-    this.onChange?.();
+    this.camera.position.copy(offset);
   }
 
   private bindEvents() {
-    // Disable default browser context menu on right-click to enable panning
+    // Disable default browser context menu to allow drag with any button
     this.canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
 
     this.canvas.addEventListener('pointerdown', (e) => {
       this.isDragging = true;
-      if (e.button === 2 || e.button === 1 || e.shiftKey) {
-        this.dragMode = 'pan';
-      } else {
-        this.dragMode = 'orbit';
-      }
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
     });
@@ -117,74 +99,70 @@ export class OrbitController {
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
 
-      if (this.dragMode === 'pan') {
-        // Heavy smooth pan with inertia
-        this.applyPan(dx, dy);
-        this.panVelX = dx * 0.45;
-        this.panVelY = dy * 0.45;
-      } else {
-        // Physical flywheel drag: smoothly accumulates torque with mass resistance
-        const targetVelX = dx * 0.0035;
-        const targetVelY = dy * 0.0035;
-        
-        // Heavy mass resistance: lerp towards target velocity
-        this.velYaw += (targetVelX - this.velYaw) * 0.42;
-        this.velPitch += (targetVelY - this.velPitch) * 0.42;
-        
-        this.rotateOrbit(this.velYaw, this.velPitch);
-      }
+      // Accumulate angular deltas with heavy mass resistance
+      this.accumYaw += dx * 0.0032;
+      this.accumPitch += dy * 0.0032;
     });
 
-    // Heavy inertial wheel zoom (buttery smooth exponential glide with physical mass feeling)
+    // Weighted optical-grade wheel zoom with smooth exponential glide
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const zoomDelta = e.deltaY * 0.0012;
-      this.targetRadius = Math.max(0.04, Math.min(30.0, this.targetRadius * (1.0 + zoomDelta)));
-      this.onChange?.();
+      const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.canvas.clientHeight : 1);
+      const clampedDelta = Math.max(-120, Math.min(120, pixels));
+      // Logarithmic zoom scaling: proportional step regardless of scale
+      const zoomFactor = Math.exp(clampedDelta * 0.00065);
+      this.targetOrbitRadius = Math.max(0.04, Math.min(45.0, this.targetOrbitRadius * zoomFactor));
     }, { passive: false });
 
-    // Keyboard support: Q and E to rotate horizontally with inertia
+    // Keyboard support: Q and E to rotate horizontally with smooth momentum
     window.addEventListener('keydown', (e) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'SELECT') return;
       const key = e.key.toLowerCase();
       if (key === 'q' || e.code === 'KeyQ') {
-        this.velYaw -= 0.025;
-        this.onChange?.();
+        this.accumYaw -= 0.08;
       } else if (key === 'e' || e.code === 'KeyE') {
-        this.velYaw += 0.025;
-        this.onChange?.();
+        this.accumYaw += 0.08;
       }
     });
   }
 
   public update(dt: number) {
     let moved = false;
+    const clampedDt = Math.min(0.05, Math.max(0.001, dt));
 
-    // Heavy viscous friction drag (preserves sustained weighty glide)
-    if (!this.isDragging && (Math.abs(this.velYaw) > 1e-5 || Math.abs(this.velPitch) > 1e-5)) {
-      this.rotateOrbit(this.velYaw, this.velPitch);
-      const friction = Math.pow(0.91, Math.min(3.0, dt * 60.0));
-      this.velYaw *= friction;
-      this.velPitch *= friction;
+    // 1. Damped Flywheel Orbit Rotation
+    // Critically damped exponential ease-in & ease-out
+    const damping = 1.0 - Math.exp(-12.0 * clampedDt);
+    const stepYaw = this.accumYaw * damping;
+    const stepPitch = this.accumPitch * damping;
+
+    this.accumYaw -= stepYaw;
+    this.accumPitch -= stepPitch;
+
+    if (Math.abs(stepYaw) > 1e-7 || Math.abs(stepPitch) > 1e-7) {
+      this.rotateOrbit(stepYaw, stepPitch);
       moved = true;
     }
 
-    // Heavy pan momentum decay
-    if (!this.isDragging && (Math.abs(this.panVelX) > 1e-3 || Math.abs(this.panVelY) > 1e-3)) {
-      this.applyPan(this.panVelX, this.panVelY);
-      const panFriction = Math.pow(0.88, Math.min(3.0, dt * 60.0));
-      this.panVelX *= panFriction;
-      this.panVelY *= panFriction;
-      moved = true;
+    // Heavy viscous friction drag when released to sustain flywheel glide
+    if (!this.isDragging) {
+      const friction = Math.pow(0.95, clampedDt * 60.0);
+      this.accumYaw *= friction;
+      this.accumPitch *= friction;
     }
 
-    // Heavy inertial exponential zoom glide
-    const offset = this.camera.position.clone().sub(this.camera.target);
-    const currentRadius = offset.length();
-    if (Math.abs(currentRadius - this.targetRadius) > 1e-4) {
-      const zoomEase = Math.min(1.0, dt * 7.5);
-      const newRadius = currentRadius + (this.targetRadius - currentRadius) * zoomEase;
-      offset.normalize().scale(newRadius);
-      this.camera.position.copy(this.camera.target).add(offset);
+    // 2. Heavy Optical Zoom Glide (exponential critically damped)
+    const diffRadius = this.targetOrbitRadius - this.orbitRadius;
+    if (Math.abs(diffRadius) > 0.0001) {
+      const zoomEase = 1.0 - Math.exp(-7.5 * clampedDt);
+      this.orbitRadius += diffRadius * zoomEase;
+
+      // Lock position strictly along radial vector from object center (0, 0, 0)
+      this.camera.target.set(0, 0, 0);
+      const offset = this.camera.position.clone();
+      const curDist = offset.length() || 1.0;
+      offset.scale(this.orbitRadius / curDist);
+      this.camera.position.copy(offset);
       moved = true;
     }
 
