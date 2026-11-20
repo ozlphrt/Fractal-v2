@@ -15,11 +15,9 @@ export const NEW_FORMULA_IDS = {
   // Group 2: Triply Periodic Minimal Surfaces
   SCHOEN_GYROID: 'schoen_gyroid',
   SCHWARZ_P: 'schwarz_p',
-  NEOVIUS: 'neovius',
 
   // Group 3: Hyperbolic & Coxeter Honeycombs
   POINCARE_DODEC: 'poincare_dodec',
-  COXETER_OCTA: 'coxeter_octa',
   KLEIN_TORUS: 'klein_torus',
 
   // Group 4: Clifford Torus & Hopf Fibrations
@@ -27,9 +25,7 @@ export const NEW_FORMULA_IDS = {
   VILLARCEAU_TORUS: 'villarceau_torus',
   CLIFFORD_MANIFOLD: 'clifford_manifold',
 
-  // Group 5: Organic Biomorphs & Bicomplex Dendrites
-  PICKOVER_BIOMORPH: 'pickover_biomorph',
-  BICOMPLEX_DENDRITE: 'bicomplex_dendrite',
+  // Group 5: Biological Shells & Growth
   CORAL_NAUTILUS: 'coral_nautilus'
 } as const;
 
@@ -410,60 +406,6 @@ float mapFractal(vec3 pos, out vec4 trap) {
     }
   },
 
-  [NEW_FORMULA_IDS.NEOVIUS]: {
-    id: NEW_FORMULA_IDS.NEOVIUS,
-    name: 'Neovius Matrix',
-    subtitle: 'Honeycomb Diatom Shell Architecture',
-    defaultCam: {
-      pos: [0.0, 0.2, 2.7],
-      target: [0.0, 0.0, 0.0]
-    },
-    boundRadius: 5.2,
-    params: [
-      { id: 'nv_freq', name: 'Frequency', min: 1.2, max: 4.2, step: 0.05, default: 2.35, uniform: 'u_nv_freq', type: 'float' },
-      { id: 'nv_channel', name: 'Channel Width', min: 0.05, max: 0.45, step: 0.01, default: 0.18, uniform: 'u_nv_channel', type: 'float' },
-      { id: 'nv_fold', name: 'Octahedral Fold', min: 0.1, max: 0.9, step: 0.02, default: 0.45, uniform: 'u_nv_fold', type: 'float' },
-      { id: 'nv_iterations', name: 'Iterations', min: 2, max: 5, step: 1, default: 3, uniform: 'u_nv_iterations', type: 'int' }
-    ],
-    presets: [
-      { name: 'Silica Diatom Micro-Shell', values: { nv_freq: 2.35, nv_channel: 0.18, nv_fold: 0.45, nv_iterations: 3 } },
-      { name: 'Hyper-Filtration Crystal Sponge', values: { nv_freq: 3.4, nv_channel: 0.12, nv_fold: 0.65, nv_iterations: 4 } }
-    ],
-    glsl: `
-float mapFractal(vec3 pos, out vec4 trap) {
-    vec3 p = pos;
-    float sc = u_nv_freq;
-    float d = 1e5;
-    vec4 orbit = vec4(100.0);
-
-    for (int i = 0; i < 5; i++) {
-        if (i >= u_nv_iterations) break;
-        vec3 sp = p * sc;
-        float cx = cos(sp.x), cy = cos(sp.y), cz = cos(sp.z);
-        // Neovius equation: 3(cos x + cos y + cos z) + 4 cos x cos y cos z
-        float n = 3.0 * (cx + cy + cz) + 4.0 * cx * cy * cz;
-        float layerD = (abs(n) - u_nv_channel * 4.0) / (3.5 * sc);
-        d = min(d, layerD);
-        orbit = min(orbit, vec4(abs(vec3(cx, cy, cz)), abs(n)));
-        // Octahedral fold modulation
-        p = abs(p);
-        if (p.x < p.y) p.xy = p.yx;
-        if (p.x < p.z) p.xz = p.zx;
-        p -= u_nv_fold;
-        sc *= 1.7;
-    }
-    trap = orbit;
-    return max(d, length(pos) - 2.6);
-}
-`,
-    cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const sc = values.nv_freq ?? 2.35;
-      const cx = Math.cos(pos[0] * sc), cy = Math.cos(pos[1] * sc), cz = Math.cos(pos[2] * sc);
-      const n = 3.0 * (cx + cy + cz) + 4.0 * cx * cy * cz;
-      return Math.max((Math.abs(n) - (values.nv_channel ?? 0.18) * 4) / (3.5 * sc), Math.hypot(...pos) - 2.6);
-    }
-  },
-
   // =========================================================================
   // GROUP 3: HYPERBOLIC & COXETER HONEYCOMBS (COX)
   // =========================================================================
@@ -545,72 +487,6 @@ float mapFractal(vec3 pos, out vec4 trap) {
         dr *= sc;
       }
       return (Math.hypot(px, py, pz) - 0.75) / Math.max(1e-4, dr);
-    }
-  },
-
-  [NEW_FORMULA_IDS.COXETER_OCTA]: {
-    id: NEW_FORMULA_IDS.COXETER_OCTA,
-    name: 'Coxeter Octahedron',
-    subtitle: 'Hyperbolic Reflection Gem Vault',
-    defaultCam: {
-      pos: [0.0, 0.4, 2.5],
-      target: [0.0, 0.0, 0.0]
-    },
-    boundRadius: 5.0,
-    params: [
-      { id: 'cx_scale', name: 'Fractal Scale', min: 1.3, max: 2.4, step: 0.02, default: 1.72, uniform: 'u_cx_scale', type: 'float' },
-      { id: 'cx_offset', name: 'Mirror Offset', min: 0.4, max: 1.4, step: 0.02, default: 0.88, uniform: 'u_cx_offset', type: 'float' },
-      { id: 'cx_rot', name: 'Mirror Twist', min: 0.0, max: 45.0, step: 0.5, default: 15.0, uniform: 'u_cx_rot', type: 'float' },
-      { id: 'cx_iterations', name: 'Iterations', min: 6, max: 16, step: 1, default: 11, uniform: 'u_cx_iterations', type: 'int' }
-    ],
-    presets: [
-      { name: 'Multifaceted Jewel Chamber', values: { cx_scale: 1.72, cx_offset: 0.88, cx_rot: 15.0, cx_iterations: 11 } },
-      { name: 'Prismatic Mirror Labyrinth', values: { cx_scale: 1.95, cx_offset: 1.1, cx_rot: 28.0, cx_iterations: 13 } }
-    ],
-    glsl: `
-float mapFractal(vec3 pos, out vec4 trap) {
-    vec3 p = pos;
-    float sc = u_cx_scale;
-    float off = u_cx_offset;
-    float dr = 1.0;
-    vec4 orbit = vec4(100.0);
-    float ang = radians(u_cx_rot);
-    float ca = cos(ang), sa = sin(ang);
-
-    for (int i = 0; i < 16; i++) {
-        if (i >= u_cx_iterations) break;
-        // Octahedral Coxeter group reflections
-        p = abs(p);
-        if (p.x + p.y < 0.0) p.xy = -p.yx;
-        if (p.x + p.z < 0.0) p.xz = -p.zx;
-        if (p.y + p.z < 0.0) p.yz = -p.zy;
-        // Slight in-plane twist
-        float rx = p.x * ca - p.z * sa;
-        float rz = p.x * sa + p.z * ca;
-        p.x = rx; p.z = rz;
-        p = p * sc - vec3(off);
-        dr = dr * sc;
-        orbit = min(orbit, vec4(p, length(p)));
-    }
-    trap = orbit;
-    return (length(p) - 1.0) / dr;
-}
-`,
-    cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const sc = values.cx_scale ?? 1.72;
-      const off = values.cx_offset ?? 0.88;
-      const iters = Math.round(values.cx_iterations ?? 11);
-      let px = pos[0], py = pos[1], pz = pos[2];
-      let dr = 1.0;
-      for (let i = 0; i < iters; i++) {
-        px = Math.abs(px); py = Math.abs(py); pz = Math.abs(pz);
-        if (px + py < 0) { const t = -px; px = -py; py = t; }
-        if (px + pz < 0) { const t = -px; px = -pz; pz = t; }
-        if (py + pz < 0) { const t = -py; py = -pz; pz = t; }
-        px = px * sc - off; py = py * sc - off; pz = pz * sc - off;
-        dr *= sc;
-      }
-      return (Math.hypot(px, py, pz) - 1.0) / Math.max(1e-4, dr);
     }
   },
 
@@ -774,7 +650,7 @@ float mapFractal(vec3 pos, out vec4 trap) {
         vec2 strandCenter = vec2(cos(strandAngle), sin(strandAngle)) * r;
         float strandD = length(torusCross - strandCenter) - 0.065;
         d = min(d, strandD);
-        orbit = min(orbit, vec4(abs(torusCross - strandCenter), strandD));
+        orbit = min(orbit, vec4(torusCross - strandCenter, strandD, float(i) / float(strands)));
     }
     trap = orbit;
     return d;
@@ -790,174 +666,84 @@ float mapFractal(vec3 pos, out vec4 trap) {
 
   [NEW_FORMULA_IDS.CLIFFORD_MANIFOLD]: {
     id: NEW_FORMULA_IDS.CLIFFORD_MANIFOLD,
-    name: 'Clifford Attractor',
-    subtitle: 'Dynamic Chaotic Ribbon Manifold',
+    name: 'Clifford Manifold',
+    subtitle: 'Continuous 4D Stereographic Torus Shell',
     defaultCam: {
       pos: [0.0, 0.0, 2.7],
       target: [0.0, 0.0, 0.0]
     },
     boundRadius: 5.0,
     params: [
-      { id: 'cl_param_a', name: 'Chaos Param A', min: -2.5, max: 2.5, step: 0.02, default: 1.7, uniform: 'u_cl_param_a', type: 'float' },
-      { id: 'cl_param_b', name: 'Chaos Param B', min: -2.5, max: 2.5, step: 0.02, default: 1.8, uniform: 'u_cl_param_b', type: 'float' },
-      { id: 'cl_thickness', name: 'Ribbon Thickness', min: 0.03, max: 0.22, step: 0.01, default: 0.08, uniform: 'u_cl_thickness', type: 'float' },
-      { id: 'cl_iterations', name: 'Iterations', min: 6, max: 18, step: 1, default: 12, uniform: 'u_cl_iterations', type: 'int' }
+      { id: 'cl_param_a', name: '4D Pitch Angle', min: -3.14, max: 3.14, step: 0.02, default: 0.65, uniform: 'u_cl_param_a', type: 'float' },
+      { id: 'cl_param_b', name: '4D Yaw Angle', min: -3.14, max: 3.14, step: 0.02, default: 1.15, uniform: 'u_cl_param_b', type: 'float' },
+      { id: 'cl_thickness', name: 'Shell Thickness', min: 0.04, max: 0.28, step: 0.01, default: 0.11, uniform: 'u_cl_thickness', type: 'float' },
+      { id: 'cl_iterations', name: 'Manifold Layers', min: 1, max: 6, step: 1, default: 3, uniform: 'u_cl_iterations', type: 'int' }
     ],
     presets: [
-      { name: 'Chaotic Swirling Plasma Dynamo', values: { cl_param_a: 1.7, cl_param_b: 1.8, cl_thickness: 0.08, cl_iterations: 12 } },
-      { name: 'Ethereal Cosmic Ribbon Vortex', values: { cl_param_a: -1.4, cl_param_b: 1.6, cl_thickness: 0.06, cl_iterations: 14 } }
+      { name: 'Interlocking Clifford Cyclides', values: { cl_param_a: 0.65, cl_param_b: 1.15, cl_thickness: 0.11, cl_iterations: 3 } },
+      { name: 'Continuous Monolithic 4D Torus', values: { cl_param_a: 0.0, cl_param_b: 0.0, cl_thickness: 0.14, cl_iterations: 1 } },
+      { name: 'Braided Conformal Shells', values: { cl_param_a: 1.2, cl_param_b: -0.8, cl_thickness: 0.08, cl_iterations: 4 } }
     ],
     glsl: `
 float mapFractal(vec3 pos, out vec4 trap) {
     vec3 p = pos;
+    float r2 = dot(p, p);
+    // Conformal stereographic inverse projection to 4D hypersphere S^3
+    float denom = r2 + 1.0;
+    vec4 p4 = vec4(2.0 * p, r2 - 1.0) / denom;
+
+    // 4D hyper-rotations (SO(4) Clifford action)
     float a = u_cl_param_a;
     float b = u_cl_param_b;
+    
+    // Rotate in XW and YZ planes
+    float cosA = cos(a), sinA = sin(a);
+    float cosB = cos(b), sinB = sin(b);
+    
+    vec4 q4;
+    q4.x = p4.x * cosA - p4.w * sinA;
+    q4.w = p4.x * sinA + p4.w * cosA;
+    q4.y = p4.y * cosB - p4.z * sinB;
+    q4.z = p4.y * sinB + p4.z * cosB;
+
     float d = 1e5;
     vec4 orbit = vec4(100.0);
-
-    for (int i = 0; i < 18; i++) {
-        if (i >= u_cl_iterations) break;
-        // Clifford 3D chaotic mapping step
-        vec3 nextP = vec3(
-            sin(a * p.y) + 0.5 * cos(a * p.x),
-            sin(b * p.z) + 0.5 * cos(b * p.y),
-            sin(a * p.x) + 0.5 * cos(b * p.z)
-        );
-        vec3 mid = (p + nextP) * 0.5;
-        float segD = length(pos - mid) - u_cl_thickness;
-        d = min(d, segD);
-        orbit = min(orbit, vec4(abs(p), segD));
-        p = nextP;
+    int iters = u_cl_iterations;
+    
+    // Continuous connected nested Clifford cyclide sheets
+    for (int i = 0; i < 6; i++) {
+        if (i >= iters) break;
+        float shift = float(i) * 0.785398;
+        vec2 rotC = vec2(q4.x * cos(shift) - q4.y * sin(shift), q4.z);
+        float rCross = length(rotC);
+        float d4 = abs(rCross - 0.7071) - u_cl_thickness;
+        // Conformal scale factor back to R^3: denom * 0.5
+        float d3 = d4 * (denom * 0.5);
+        d = min(d, d3);
+        orbit = min(orbit, vec4(abs(p4.xyz), d3));
+        
+        // Gentle fold for structural richness without disconnecting geometry
+        q4.xyz = abs(q4.xyz) - vec3(0.18, 0.18, 0.18);
     }
+
     trap = orbit;
     return d;
 }
 `,
     cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const th = values.cl_thickness ?? 0.08;
-      return Math.max(0.01, Math.hypot(...pos) - 1.8 - th);
+      const r2 = pos[0]*pos[0] + pos[1]*pos[1] + pos[2]*pos[2];
+      const denom = r2 + 1.0;
+      const p4w = (r2 - 1.0) / denom;
+      const p4x = (2.0 * pos[0]) / denom;
+      const th = values.cl_thickness ?? 0.11;
+      const d4 = Math.abs(Math.hypot(p4x, p4w) - 0.7071) - th;
+      return d4 * (denom * 0.5);
     }
   },
 
   // =========================================================================
-  // GROUP 5: ORGANIC BIOMORPHS & BICOMPLEX DENDRITES (BIO)
+  // GROUP 5: BIOLOGICAL SHELLS & GROWTH (BIO)
   // =========================================================================
-
-  [NEW_FORMULA_IDS.PICKOVER_BIOMORPH]: {
-    id: NEW_FORMULA_IDS.PICKOVER_BIOMORPH,
-    name: 'Pickover Biomorph',
-    subtitle: 'Protozoan Cellular Membrane',
-    defaultCam: {
-      pos: [0.0, 0.0, 2.5],
-      target: [0.0, 0.0, 0.0]
-    },
-    boundRadius: 4.8,
-    params: [
-      { id: 'bm_power', name: 'Biomorph Power', min: 2.0, max: 5.0, step: 0.1, default: 3.0, uniform: 'u_bm_power', type: 'float' },
-      { id: 'bm_thresh', name: 'Cell Threshold', min: 0.1, max: 1.4, step: 0.02, default: 0.65, uniform: 'u_bm_thresh', type: 'float' },
-      { id: 'bm_julia_c', name: 'Julia Morph', min: -0.8, max: 0.8, step: 0.02, default: 0.32, uniform: 'u_bm_julia_c', type: 'float' },
-      { id: 'bm_iterations', name: 'Iterations', min: 6, max: 16, step: 1, default: 10, uniform: 'u_bm_iterations', type: 'int' }
-    ],
-    presets: [
-      { name: 'Microscopic Radiolaria Skeleton', values: { bm_power: 3.0, bm_thresh: 0.65, bm_julia_c: 0.32, bm_iterations: 10 } },
-      { name: 'Protozoan Cellular Flagella', values: { bm_power: 4.0, bm_thresh: 0.85, bm_julia_c: 0.45, bm_iterations: 12 } }
-    ],
-    glsl: `
-float mapFractal(vec3 pos, out vec4 trap) {
-    vec3 z = pos;
-    vec3 c = vec3(u_bm_julia_c, u_bm_julia_c * 0.5, 0.2);
-    float dr = 1.0;
-    vec4 orbit = vec4(100.0);
-    float bioTrap = 1e5;
-
-    for (int i = 0; i < 16; i++) {
-        if (i >= u_bm_iterations) break;
-        float r = length(z);
-        if (r > 8.0) break;
-        // Triplex power fold
-        float theta = acos(clamp(z.z / max(1e-4, r), -1.0, 1.0)) * u_bm_power;
-        float phi = atan(z.y, z.x) * u_bm_power;
-        dr = pow(r, u_bm_power - 1.0) * u_bm_power * dr + 1.0;
-        z = pow(r, u_bm_power) * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + c;
-        // Pickover biomorph trap condition: minimum coordinate cross section
-        float currentTrap = min(abs(z.x), min(abs(z.y), abs(z.z)));
-        bioTrap = min(bioTrap, currentTrap);
-        orbit = min(orbit, vec4(abs(z), currentTrap));
-    }
-    trap = orbit;
-    float surfaceD = (bioTrap - u_bm_thresh) / max(1.0, dr);
-    return max(surfaceD, length(pos) - 2.5);
-}
-`,
-    cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const th = values.bm_thresh ?? 0.65;
-      const minCoord = Math.min(Math.abs(pos[0]), Math.min(Math.abs(pos[1]), Math.abs(pos[2])));
-      return Math.max(minCoord - th, Math.hypot(...pos) - 2.5);
-    }
-  },
-
-  [NEW_FORMULA_IDS.BICOMPLEX_DENDRITE]: {
-    id: NEW_FORMULA_IDS.BICOMPLEX_DENDRITE,
-    name: 'Bicomplex Dendrite',
-    subtitle: 'Arborized Neural Lightning Tree',
-    defaultCam: {
-      pos: [0.0, 0.5, 2.6],
-      target: [0.0, 0.1, 0.0]
-    },
-    boundRadius: 5.0,
-    params: [
-      { id: 'bd_scale', name: 'Branching Scale', min: 1.3, max: 2.2, step: 0.02, default: 1.65, uniform: 'u_bd_scale', type: 'float' },
-      { id: 'bd_angle', name: 'Branch Angle', min: 20.0, max: 60.0, step: 0.5, default: 38.0, uniform: 'u_bd_angle', type: 'float' },
-      { id: 'bd_offset', name: 'Sprout Offset', min: 0.2, max: 1.0, step: 0.02, default: 0.55, uniform: 'u_bd_offset', type: 'float' },
-      { id: 'bd_iterations', name: 'Iterations', min: 5, max: 14, step: 1, default: 9, uniform: 'u_bd_iterations', type: 'int' }
-    ],
-    presets: [
-      { name: 'Arborized Neural Pathway', values: { bd_scale: 1.65, bd_angle: 38.0, bd_offset: 0.55, bd_iterations: 9 } },
-      { name: 'Fractal Lightning Fan', values: { bd_scale: 1.85, bd_angle: 48.0, bd_offset: 0.72, bd_iterations: 11 } }
-    ],
-    glsl: `
-float mapFractal(vec3 pos, out vec4 trap) {
-    vec3 p = pos;
-    float sc = u_bd_scale;
-    float off = u_bd_offset;
-    float dr = 1.0;
-    vec4 orbit = vec4(100.0);
-    float ang = radians(u_bd_angle);
-    float ca = cos(ang), sa = sin(ang);
-
-    for (int i = 0; i < 14; i++) {
-        if (i >= u_bd_iterations) break;
-        // Dendritic branching fold
-        p = abs(p);
-        if (p.x < p.y) p.xy = p.yx;
-        // 2D rotation for branch split
-        float rx = p.x * ca - p.y * sa;
-        float ry = p.x * sa + p.y * ca;
-        p.x = rx; p.y = ry;
-        p.z -= off * 0.5;
-        p = p * sc - vec3(off);
-        dr = dr * sc;
-        orbit = min(orbit, vec4(abs(p), length(p)));
-    }
-    trap = orbit;
-    return (length(p.xy) - 0.25) / dr;
-}
-`,
-    cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const sc = values.bd_scale ?? 1.65;
-      const off = values.bd_offset ?? 0.55;
-      const iters = Math.round(values.bd_iterations ?? 9);
-      let px = pos[0], py = pos[1], pz = pos[2];
-      let dr = 1.0;
-      for (let i = 0; i < iters; i++) {
-        px = Math.abs(px); py = Math.abs(py); pz = Math.abs(pz);
-        if (px < py) { const t = px; px = py; py = t; }
-        px = px * sc - off; py = py * sc - off; pz = pz * sc - off;
-        dr *= sc;
-      }
-      return (Math.hypot(px, py) - 0.25) / Math.max(1e-4, dr);
-    }
-  },
 
   [NEW_FORMULA_IDS.CORAL_NAUTILUS]: {
     id: NEW_FORMULA_IDS.CORAL_NAUTILUS,
