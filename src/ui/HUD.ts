@@ -1301,6 +1301,17 @@ export class HUD {
         document.getElementById('settings-drawer')?.classList.add('closed');
       }
     });
+
+    // Debug mode toggle (Keystroke 'D')
+    window.addEventListener('keydown', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+      if (e.key === 'd' || e.key === 'D') {
+        this.toggleDebugMode();
+      }
+    });
   }
 
   private evalPaletteRGB(t: number, pal: PalettePreset): string {
@@ -1358,6 +1369,7 @@ export class HUD {
     this.selectedKeyframeId = null;
     this.populateFormulaParams();
     this.refreshGlobalKeyframeTrack();
+    this.updateDebugOverlay();
     this.onFormulaChange?.(f, fromTour);
   }
 
@@ -1385,6 +1397,7 @@ export class HUD {
 
     this.updatePopoverActiveStates();
     this.updatePaletteSwatch();
+    this.updateDebugOverlay();
     this.onPaletteChange?.(this.currentPalette);
   }
 
@@ -1630,9 +1643,44 @@ export class HUD {
     return { ...this.dynamicParamValues };
   }
 
+  public isDebugMode: boolean = false;
+
+  public toggleDebugMode() {
+    this.isDebugMode = !this.isDebugMode;
+    const overlay = document.getElementById('debug-overlay');
+    if (overlay) {
+      if (this.isDebugMode) {
+        overlay.classList.remove('hidden');
+        this.updateDebugOverlay();
+      } else {
+        overlay.classList.add('hidden');
+      }
+    }
+  }
+
+  public updateDebugOverlay() {
+    if (!this.isDebugMode) return;
+    const f = this.getActiveFormula();
+    const pal = this.getActivePalette();
+
+    const fVal = document.getElementById('debug-formula-val');
+    if (fVal) {
+      fVal.textContent = `${this.activeFormulaIndex + 1}. ${f.name}`;
+    }
+
+    const mVal = document.getElementById('debug-material-val');
+    if (mVal) {
+      mVal.textContent = `${this.activePaletteIndex + 1}. ${pal.name}`;
+    }
+  }
+
   public updateStats(fps: number, _sampleCount: number) {
     const fpsCounter = document.getElementById('fps-counter');
     if (fpsCounter) fpsCounter.textContent = Math.round(fps).toString();
+    if (this.isDebugMode) {
+      const debugFps = document.getElementById('debug-fps-val');
+      if (debugFps) debugFps.textContent = Math.round(fps).toString();
+    }
   }
 }
 
