@@ -298,6 +298,8 @@ export class Raymarcher {
       settings.exposure * exposureMod,
       settings.bloomIntensity * bloomMod,
       settings.progressiveAccumulation ? 0.35 : 0.65,
+      settings.focalDistance,
+      settings.aperture,
       this.transitionTexture,
       this.transitionWeight
     );

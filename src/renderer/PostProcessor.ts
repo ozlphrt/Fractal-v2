@@ -14,6 +14,8 @@ export class PostProcessor {
   private exposureLoc: WebGLUniformLocation | null = null;
   private bloomIntensityLoc: WebGLUniformLocation | null = null;
   private chromaticAberrationLoc: WebGLUniformLocation | null = null;
+  private focalDistanceLoc: WebGLUniformLocation | null = null;
+  private apertureLoc: WebGLUniformLocation | null = null;
 
   constructor(gl: WebGL2RenderingContext, quadVAO: WebGLVertexArrayObject) {
     this.gl = gl;
@@ -43,6 +45,8 @@ export class PostProcessor {
     this.exposureLoc = gl.getUniformLocation(prog, 'u_exposure');
     this.bloomIntensityLoc = gl.getUniformLocation(prog, 'u_bloomIntensity');
     this.chromaticAberrationLoc = gl.getUniformLocation(prog, 'u_chromaticAberration');
+    this.focalDistanceLoc = gl.getUniformLocation(prog, 'u_focalDistance');
+    this.apertureLoc = gl.getUniformLocation(prog, 'u_aperture');
   }
 
   public render(
@@ -50,6 +54,8 @@ export class PostProcessor {
     exposure: number = 1.0,
     bloomIntensity: number = 0.8,
     chromaticAberration: number = 1.0,
+    focalDistance: number = 2.35,
+    aperture: number = 0.0,
     transitionTexture: WebGLTexture | null = null,
     transitionWeight: number = 0.0
   ) {
@@ -74,6 +80,8 @@ export class PostProcessor {
     gl.uniform1f(this.exposureLoc, exposure);
     gl.uniform1f(this.bloomIntensityLoc, bloomIntensity);
     gl.uniform1f(this.chromaticAberrationLoc, chromaticAberration);
+    gl.uniform1f(this.focalDistanceLoc, focalDistance);
+    gl.uniform1f(this.apertureLoc, aperture);
 
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

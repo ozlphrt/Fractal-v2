@@ -23,6 +23,8 @@ uniform float u_transitionWeight;
 uniform float u_exposure;
 uniform float u_bloomIntensity;
 uniform float u_chromaticAberration;
+uniform float u_focalDistance;
+uniform float u_aperture;
 
 // ACES Filmic Tone Mapping Curve (Narkowicz 2015)
 vec3 ACESFilm(vec3 x) {
@@ -50,16 +52,51 @@ void main() {
     if (u_bloomIntensity > 0.001) {
         vec2 texel = 1.0 / vec2(textureSize(u_accumTexture, 0));
         vec3 bloom = vec3(0.0);
-        vec2 bOffsets[8] = vec2[](
-            vec2(-2.5, -2.5), vec2(2.5, -2.5), vec2(-2.5, 2.5), vec2(2.5, 2.5),
-            vec2(-4.5,  0.0), vec2(4.5,  0.0), vec2( 0.0, -4.5), vec2(0.0,  4.5)
+        // Multi-tier Poisson-disc kernel (tight specular halo + medium body + wide atmospheric aura)
+        const vec2 bOffsets[12] = vec2[](
+            vec2( 0.0,  2.0), vec2( 2.0,  0.0), vec2( 0.0, -2.0), vec2(-2.0,  0.0),
+            vec2(-4.5, -4.5), vec2( 4.5, -4.5), vec2(-4.5,  4.5), vec2( 4.5,  4.5),
+            vec2(-9.0,  0.0), vec2( 9.0,  0.0), vec2( 0.0, -9.0), vec2( 0.0,  9.0)
         );
-        for (int i = 0; i < 8; i++) {
-            vec3 tap = texture(u_accumTexture, uv + bOffsets[i] * texel * 1.8).rgb;
-            vec3 bright = max(vec3(0.0), tap - 0.65);
-            bloom += bright * 0.125;
+        const float bWeights[12] = float[](
+            0.15, 0.15, 0.15, 0.15,
+            0.08, 0.08, 0.08, 0.08,
+            0.045, 0.045, 0.045, 0.045
+        );
+        for (int i = 0; i < 12; i++) {
+            vec3 tap = texture(u_accumTexture, uv + bOffsets[i] * texel * 2.5).rgb;
+            float luma = dot(tap, vec3(0.2126, 0.7152, 0.0722));
+            float bright = smoothstep(0.18, 0.85, luma);
+            bloom += tap * bright * bWeights[i];
         }
-        color += bloom * u_bloomIntensity * 2.5;
+        color += bloom * u_bloomIntensity * 2.8;
+    }
+
+    // Depth-Aware Photographic Bokeh (Circle of Confusion DoF)
+    if (u_aperture > 0.0005) {
+        float depth = texture(u_accumTexture, uv).a;
+        float coc = clamp(abs(depth - u_focalDistance) / max(0.6, depth) * u_aperture * 45.0, 0.0, 18.0);
+        if (coc > 0.35) {
+            vec2 texel = 1.0 / vec2(textureSize(u_accumTexture, 0));
+            vec3 dofColor = color;
+            float totalWeight = 1.0;
+            const vec2 dofDisk[8] = vec2[](
+                vec2( 0.0,  1.0), vec2( 0.707,  0.707),
+                vec2( 1.0,  0.0), vec2( 0.707, -0.707),
+                vec2( 0.0, -1.0), vec2(-0.707, -0.707),
+                vec2(-1.0,  0.0), vec2(-0.707,  0.707)
+            );
+            for (int i = 0; i < 8; i++) {
+                vec2 tapUV = uv + dofDisk[i] * texel * coc;
+                vec4 tapSample = texture(u_accumTexture, tapUV);
+                float tapDepth = tapSample.a;
+                float tapCoC = clamp(abs(tapDepth - u_focalDistance) / max(0.6, tapDepth) * u_aperture * 45.0, 0.0, 18.0);
+                float w = (tapDepth >= depth) ? 1.0 : smoothstep(0.0, 1.0, tapCoC / max(0.1, coc));
+                dofColor += tapSample.rgb * w;
+                totalWeight += w;
+            }
+            color = dofColor / totalWeight;
+        }
     }
 
     // Apply exposure

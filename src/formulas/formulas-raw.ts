@@ -411,6 +411,7 @@ float mapFractal(vec3 pos, out vec4 trap) {
         id: FORMULA_IDS.APOLLONIAN,
         name: 'Gasket',
         subtitle: 'Kleinian 3D Sphere Inversion Packing',
+        boundRadius: 6.0,
         defaultCam: {
             pos: [1.7, 1.2, 2.6],
             target: [0.0, 0.0, 0.0]
@@ -418,7 +419,7 @@ float mapFractal(vec3 pos, out vec4 trap) {
         params: [
             { id: 'apol_scale', name: 'Inversion Scale', min: 0.8, max: 1.8, step: 0.02, default: 1.18, uniform: 'u_apol_scale', type: 'float' },
             { id: 'apol_core', name: 'Core Voids', min: 0.01, max: 0.6, step: 0.01, default: 0.22, uniform: 'u_apol_core', type: 'float' },
-            { id: 'apol_radius', name: 'Sculptural Bound', min: 1.0, max: 2.5, step: 0.02, default: 1.55, uniform: 'u_apol_radius', type: 'float' },
+            { id: 'apol_radius', name: 'Sculptural Bound', min: 1.0, max: 5.0, step: 0.02, default: 1.55, uniform: 'u_apol_radius', type: 'float' },
             { id: 'apol_rot_x', name: 'Fold Rot X', min: -0.3, max: 0.3, step: 0.01, default: 0.04, uniform: 'u_apol_rot_x', type: 'float' },
             { id: 'apol_rot_y', name: 'Fold Rot Y', min: -0.3, max: 0.3, step: 0.01, default: 0.08, uniform: 'u_apol_rot_y', type: 'float' },
             { id: 'apol_iterations', name: 'Iterations', min: 4, max: 12, step: 1, default: 8, uniform: 'u_apol_iterations', type: 'int' }

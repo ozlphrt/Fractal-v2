@@ -286,7 +286,8 @@ void main() {
     sceneColor += glow * glowTint;
     sceneColor += godrays * vec3(0.9, 0.85, 0.7);
 
-    fragColor = vec4(sceneColor, 1.0);
+    // Alpha channel preserves exact surface hit distance t for depth-aware optical DoF & bokeh
+    fragColor = vec4(sceneColor, hit ? t : 999.0);
 }
 `;
 }
