@@ -70,7 +70,6 @@ export interface RenderSettings {
   audioSensitivity: number; // Master gain (0.2 - 3.0, default 1.4)
   audioBreathing: number;   // Primary math scale expansion (0.0 - 2.0, default 0.9)
   audioMutation: number;    // Multi-parameter topological morphing (0.0 - 2.5, default 1.2)
-  audioWarp: number;        // Acoustic harmonic domain twist & 3D standing waves (0.0 - 2.0, default 0.85)
   audioBeatPunch: number;   // Camera optical zoom recoil (0.0 - 2.0, default 0.70)
   audioGlow: number;        // Volumetric aura & godrays flare (0.0 - 2.0, default 0.80)
   audioColorShift: number;  // Palette phase flow & mineral flash (0.0 - 2.0, default 0.75)

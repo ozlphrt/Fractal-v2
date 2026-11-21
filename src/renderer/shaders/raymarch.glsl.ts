@@ -62,7 +62,6 @@ uniform float u_audioMid;
 uniform float u_audioTreble;
 uniform float u_audioLevel;
 uniform float u_audioBeat;
-uniform float u_audioWarp;
 uniform float u_audioGlowMod;
 uniform float u_audioColorShift;
 
@@ -80,40 +79,15 @@ ${COMMON_GLSL}
 // Injected formula distance estimator
 ${formula.glslDE}
 
-// Acoustic torsional domain mutation (pure rotational torque, zero spatial waves or autonomous oscillations)
-vec3 warpDomain(vec3 p) {
-    if (u_audioWarp > 0.001) {
-        // Torsional torque around vertical axis strictly proportional to audio mid & beat energy
-        float twistAngle = p.y * (u_audioMid * 0.25 + u_audioBeat * 0.35) * u_audioWarp;
-        float ct = cos(twistAngle), st = sin(twistAngle);
-        p.xz = mat2(ct, -st, st, ct) * p.xz;
-    }
-    return p;
-}
-
-float evalSceneDE(vec3 p, out vec4 trap) {
-    return mapFractal(warpDomain(p), trap);
-}
-
-// Bounding Sphere intersection test: skips empty space
-vec2 intersectSphere(vec3 ro, vec3 rd, float radius) {
-    float b = dot(ro, rd);
-    float c = dot(ro, ro) - radius * radius;
-    float h = b * b - c;
-    if (h < 0.0) return vec2(-1.0);
-    float sh = sqrt(h);
-    return vec2(-b - sh, -b + sh);
-}
-
 // Macroscopic 4-tap Tetrahedron Normal (Analytic gradient, zero micro-grit flickering)
 vec3 calcNormal(vec3 p, float eps) {
     const vec2 k = vec2(1.0, -1.0);
     vec4 t;
     return normalize(
-        k.xyy * evalSceneDE(p + k.xyy * eps, t) +
-        k.yyx * evalSceneDE(p + k.yyx * eps, t) +
-        k.yxy * evalSceneDE(p + k.yxy * eps, t) +
-        k.xxx * evalSceneDE(p + k.xxx * eps, t)
+        k.xyy * mapFractal(p + k.xyy * eps, t) +
+        k.yyx * mapFractal(p + k.yyx * eps, t) +
+        k.yxy * mapFractal(p + k.yxy * eps, t) +
+        k.xxx * mapFractal(p + k.xxx * eps, t)
     );
 }
 
@@ -125,7 +99,7 @@ float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     vec4 trap;
     for (int i = 0; i < 10; i++) {
         if (t >= maxt) break;
-        float h = evalSceneDE(ro + rd * t, trap);
+        float h = mapFractal(ro + rd * t, trap);
         if (h < 0.0005) return 0.0;
         float y = h * h / (2.0 * ph);
         float d = sqrt(max(0.0, h * h - y * y));
@@ -145,7 +119,7 @@ float calcAO(vec3 pos, vec3 nor, vec2 jitter) {
     float randOffset = fract(sin(dot(pos.xy + jitter, vec2(12.9898, 78.233))) * 43758.5453);
     for (int i = 0; i < 4; i++) {
         float h = 0.025 + (0.11 + 0.025 * randOffset) * float(i);
-        float d = evalSceneDE(pos + h * nor, trap);
+        float d = mapFractal(pos + h * nor, trap);
         occ += max(0.0, h - d) * sca;
         sca *= 0.70;
     }
@@ -191,7 +165,7 @@ void main() {
     for (int i = 0; i < 350; i++) {
         if (i >= maxIters || t > maxDist) break;
         vec3 currPos = rayOrigin + rayDir * t;
-        float d = evalSceneDE(currPos, trap);
+        float d = mapFractal(currPos, trap);
 
         // Calibrated volumetric step glow with organic audio breathing
         if (u_glowIntensity > 0.001 && d < 0.35) {

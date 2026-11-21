@@ -424,7 +424,6 @@ export class Raymarcher {
     const level = (audioMetrics?.level ?? 0.0) * audioActive * sens;
     const beat = (audioMetrics?.beat ?? 0.0) * audioActive * sens;
     const glowMod = (settings.audioGlow ?? 0.80) * audioActive;
-    const warpMod = (settings.audioWarp ?? 0.85) * audioActive;
     const colorShiftMod = (settings.audioColorShift ?? 0.75) * audioActive;
 
     set1f('u_audioBass', bass);
@@ -433,7 +432,6 @@ export class Raymarcher {
     set1f('u_audioLevel', level);
     set1f('u_audioBeat', beat);
     set1f('u_audioGlowMod', glowMod);
-    set1f('u_audioWarp', warpMod);
     set1f('u_audioColorShift', colorShiftMod);
 
     // Palette presets
