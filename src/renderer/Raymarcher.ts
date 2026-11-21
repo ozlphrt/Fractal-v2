@@ -467,10 +467,9 @@ export class Raymarcher {
             const shimmer = (treble * 0.80 + beat * 0.35) * 0.24 * mutStrength;
             val = val * (1.0 + shimmer);
           } else if (paramIndex >= 3) {
-            // Julia offsets / angles / harmonics: dynamic harmonic orbit displacement
-            const phase = paramIndex * 1.57;
-            const orbitDelta = Math.sin(time * 3.0 + phase) * (bass * 0.5 + mid * 0.5) * (span * 0.12) * mutStrength;
-            val = val + orbitDelta;
+            // Julia offsets / angles / harmonics: strictly driven by frequency balance (bass vs treble), zero autonomous time oscillations
+            const spectralShift = (bass - treble) * (span * 0.22) * mutStrength;
+            val = val + (paramIndex % 2 === 0 ? spectralShift : -spectralShift);
           }
         }
         val = Math.max(p.min * 0.8, Math.min(p.max * 1.2, val));

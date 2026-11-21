@@ -80,15 +80,13 @@ ${COMMON_GLSL}
 // Injected formula distance estimator
 ${formula.glslDE}
 
-// Acoustic 3D standing wave & torsional domain mutation
+// Acoustic torsional domain mutation (pure rotational torque, zero spatial waves or autonomous oscillations)
 vec3 warpDomain(vec3 p) {
     if (u_audioWarp > 0.001) {
-        // Torsional twist around vertical axis driven by mid & beat frequencies
-        float twistAngle = p.y * (u_audioMid * 0.40 + u_audioBeat * 0.30) * u_audioWarp;
+        // Torsional torque around vertical axis strictly proportional to audio mid & beat energy
+        float twistAngle = p.y * (u_audioMid * 0.25 + u_audioBeat * 0.35) * u_audioWarp;
         float ct = cos(twistAngle), st = sin(twistAngle);
         p.xz = mat2(ct, -st, st, ct) * p.xz;
-        // Acoustic standing wave ripple driven by heavy sub-bass
-        p += sin(p.zxy * 3.8 + u_time * 2.2) * (u_audioBass * 0.085 * u_audioWarp);
     }
     return p;
 }
