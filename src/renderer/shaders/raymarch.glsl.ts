@@ -71,11 +71,36 @@ uniform vec3 u_palB;
 uniform vec3 u_palC;
 uniform vec3 u_palD;
 
-// Multi-Material Core & Self-Lit Glowing Elements
-uniform float u_coreGlow;
-uniform vec3 u_coreColor;
-uniform float u_coreThreshold;
-uniform float u_corePolish;
+// Flying Cavity Lights (Photon Orbs)
+uniform float u_orbIntensity;
+uniform float u_orbSpeed;
+
+// Parametric 3D Lissajous flight path through cavities & crevices
+vec3 getOrbPos(int idx, float time) {
+    float t = time * u_orbSpeed;
+    if (idx == 0) {
+        float s = t * 0.40;
+        return vec3(
+            sin(s * 1.1) * cos(s * 0.6) * 1.45,
+            cos(s * 0.85) * sin(s * 1.3) * 1.15,
+            sin(s * 0.75 + 1.2) * cos(s * 0.5) * 1.35
+        );
+    } else if (idx == 1) {
+        float s = t * 0.48 + 2.5;
+        return vec3(
+            cos(s * 0.8) * sin(s * 0.55) * 1.55,
+            sin(s * 1.25) * 1.20,
+            cos(s * 1.05) * cos(s * 0.45) * 1.40
+        );
+    } else {
+        float s = t * 0.35 + 4.7;
+        return vec3(
+            sin(s * 0.7 + 0.9) * cos(s * 1.4) * 1.30,
+            cos(s * 0.95 + 0.4) * 1.20,
+            sin(s * 1.35) * sin(s * 0.65) * 1.50
+        );
+    }
+}
 
 // Formula-specific dynamic parameter uniforms
 ${formulaUniforms}
@@ -156,6 +181,11 @@ void main() {
     vec3 rayOrigin = u_camPos + cu * lensOffset.x + cv * lensOffset.y;
     vec3 rayDir = normalize(focalPoint - rayOrigin);
 
+    // Trajectory positions for 3 flying cavity light orbs
+    vec3 orb0 = getOrbPos(0, u_time);
+    vec3 orb1 = getOrbPos(1, u_time);
+    vec3 orb2 = getOrbPos(2, u_time);
+
     // Primary raymarch traversal (no artificial bounding sphere clipping to prevent corner cut-offs)
     float t = 0.02;
     float maxDist = 18.0;
@@ -168,15 +198,43 @@ void main() {
     float godrays = 0.0;
     vec3 baseGlowTint = mix(u_palA * 0.7, vec3(0.1, 0.35, 0.9), 0.45);
 
+    int hitOrbIdx = -1;
+    float dOrbs = 100.0;
+    float dOrb0 = 100.0;
+    float dOrb1 = 100.0;
+    float dOrb2 = 100.0;
+
     int maxIters = u_maxSteps > 0 ? u_maxSteps : 180;
     for (int i = 0; i < 350; i++) {
         if (i >= maxIters || t > maxDist) break;
         vec3 currPos = rayOrigin + rayDir * t;
-        float d = mapFractal(currPos, trap);
+        float dFractal = mapFractal(currPos, trap);
+
+        // Distance to the 3 flying luminous orbs (radius 0.042)
+        if (u_orbIntensity > 0.001) {
+            dOrb0 = length(currPos - orb0) - 0.042;
+            dOrb1 = length(currPos - orb1) - 0.042;
+            dOrb2 = length(currPos - orb2) - 0.042;
+            dOrbs = min(dOrb0, min(dOrb1, dOrb2));
+        }
+
+        float d = (u_orbIntensity > 0.001) ? min(dFractal, dOrbs) : dFractal;
+
+        // Volumetric atmospheric halo around flying light orbs
+        if (u_orbIntensity > 0.001) {
+            float dist0 = length(currPos - orb0);
+            float dist1 = length(currPos - orb1);
+            float dist2 = length(currPos - orb2);
+            float haloAudio = 1.0 + (u_audioBass * 1.1 + u_audioBeat * 1.4) * u_audioGlowMod;
+            float orbGlowScale = 0.00065 * u_orbIntensity * haloAudio;
+            glowAccum += vec3(1.0, 0.75, 0.28) * (orbGlowScale / (dist0 * dist0 + 0.0022));
+            glowAccum += vec3(0.18, 0.85, 1.0) * (orbGlowScale / (dist1 * dist1 + 0.0022));
+            glowAccum += vec3(0.95, 0.25, 1.0) * (orbGlowScale / (dist2 * dist2 + 0.0022));
+        }
 
         // Calibrated volumetric step glow with organic audio breathing
-        if (u_glowIntensity > 0.001 && d < 0.35) {
-            float g = max(0.0, 1.0 - d * 2.8);
+        if (u_glowIntensity > 0.001 && dFractal < 0.35) {
+            float g = max(0.0, 1.0 - dFractal * 2.8);
             float audioGlow = 1.0 + (u_audioMid * 1.8 + u_audioBass * 1.4 + u_audioBeat * 2.0) * u_audioGlowMod;
             glowAccum += baseGlowTint * (g * g * 0.012 * u_glowIntensity * audioGlow);
         }
@@ -195,12 +253,31 @@ void main() {
             hit = true;
             hitPos = rayOrigin + rayDir * t;
             finalTrap = trap;
+
+            if (u_orbIntensity > 0.001 && dOrbs <= dFractal + 0.0005) {
+                if (dOrb0 <= dOrb1 && dOrb0 <= dOrb2) hitOrbIdx = 0;
+                else if (dOrb1 <= dOrb2) hitOrbIdx = 1;
+                else hitOrbIdx = 2;
+            }
             break;
         }
         t += max(hitThresh * 0.35, d * 0.86);
     }
 
     vec3 sceneColor = vec3(0.0);
+
+    // If ray hit the luminous core of a flying orb, render incandescent light sphere
+    if (hitOrbIdx >= 0) {
+        vec3 orbCoreCol = (hitOrbIdx == 0) ? vec3(1.0, 0.82, 0.40) :
+                          (hitOrbIdx == 1) ? vec3(0.35, 0.92, 1.0) :
+                                             vec3(1.0, 0.38, 0.96);
+        float orbAudio = 1.0 + (u_audioBass * 1.4 + u_audioBeat * 1.8) * u_audioGlowMod;
+        sceneColor = orbCoreCol * (5.5 * u_orbIntensity * orbAudio);
+        sceneColor += glowAccum;
+        sceneColor += godrays * vec3(0.9, 0.85, 0.7);
+        fragColor = vec4(sceneColor, 1.0);
+        return;
+    }
 
     if (hit) {
         // Macroscopic curvature normal
@@ -223,27 +300,12 @@ void main() {
         // Natural rock crevice weathering
         bedrockAlbedo = mix(bedrockAlbedo * 0.65, bedrockAlbedo, smoothstep(0.1, 0.9, ao));
 
-        // Multi-Material Core Discrimination:
-        // Scarce, pinpoint luminescent nodes & jewel embers
-        float coreMetric = finalTrap.x;
-        vec3 pNode = sin(hitPos * 28.0);
-        float lattice = clamp(pNode.x * pNode.y * pNode.z * 1.8, 0.0, 1.0);
-        float rarityThresh = clamp(u_coreThreshold * 0.18, 0.006, 0.07);
-        float trapMask = smoothstep(rarityThresh, rarityThresh * 0.2, coreMetric);
-        float coreMask = (u_coreGlow > 0.01) ? pow(trapMask * lattice, 4.0) : 0.0;
-
-        // Core Albedo (polished contrasting mineral / metallic hue)
-        vec3 coreAlbedo = mix(bedrockAlbedo * 0.35, u_coreColor, 0.85);
-        vec3 surfaceAlbedo = mix(bedrockAlbedo, coreAlbedo, coreMask);
-
-        // Specular Power Contrast:
-        // Bedrock is rough weathered stone (shininess 20); Cores are polished metallic glass (shininess up to 96)
+        // Micro-facet specular highlight
         float specTreble = 0.22 + (u_audioTreble * 1.35 + u_audioBeat * 0.65) * u_audioGlowMod;
-        float specShininess = mix(20.0, mix(36.0, 96.0, u_corePolish), coreMask);
+        float specShininess = 28.0;
         float specRoughFactor = pow(clamp(dot(nor, halfVec), 0.0, 1.0), specShininess);
-        float specGlint = mix(specTreble, 1.8 * u_corePolish, coreMask);
         vec3 sunColor = vec3(1.0, 0.94, 0.85);
-        vec3 specularLight = specRoughFactor * shadow * sunColor * specGlint * u_sunIntensity;
+        vec3 specularLight = specRoughFactor * shadow * sunColor * specTreble * u_sunIntensity;
 
         // 1. Primary Sun Light with bass breathing
         float sunAudio = 1.0 + (u_audioBass * 0.70 + u_audioBeat * 0.55) * u_audioGlowMod;
@@ -281,21 +343,43 @@ void main() {
         vec3 ambientFill = vec3(0.12, 0.14, 0.18) * (0.5 + 0.5 * nor.y);
         vec3 ambientLight = ambientFill * ao * 0.5;
 
-        // Assemble illuminated surface with dual-material properties
-        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * surfaceAlbedo + specularLight + rimLight;
+        // Assemble base illuminated surface
+        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * bedrockAlbedo + specularLight + rimLight;
 
-        // Self-Lit Core Luminescence & Audio Energy Pulsing (Scarce Glowing Jewels)
-        if (u_coreGlow > 0.01 && coreMask > 0.001) {
-            float coreAudio = 1.0 + (u_audioBass * 1.4 + u_audioBeat * 1.8) * u_audioGlowMod;
-            vec3 coreEmissive = u_coreColor * u_coreGlow * coreAudio;
-            sceneColor += coreEmissive * (coreMask * 2.2);
+        // 5. Dynamic Flying Cavity Lights (Lighting Neighboring Surfaces)
+        if (u_orbIntensity > 0.001) {
+            vec3 orbPositions[3];
+            orbPositions[0] = orb0;
+            orbPositions[1] = orb1;
+            orbPositions[2] = orb2;
+
+            vec3 orbColors[3];
+            orbColors[0] = vec3(1.0, 0.75, 0.28);
+            orbColors[1] = vec3(0.18, 0.85, 1.0);
+            orbColors[2] = vec3(0.95, 0.25, 1.0);
+
+            float orbAudio = 1.0 + (u_audioBass * 0.85 + u_audioBeat * 1.1) * u_audioGlowMod;
+            vec3 cavityLights = vec3(0.0);
+
+            for (int k = 0; k < 3; k++) {
+                vec3 toOrb = orbPositions[k] - hitPos;
+                float dOrb = length(toOrb);
+                vec3 lDir = toOrb / max(dOrb, 1e-4);
+                float atten = 1.0 / (1.0 + 2.8 * dOrb + 4.5 * dOrb * dOrb);
+                float nDotL = max(dot(nor, lDir), 0.0);
+                vec3 halfV = normalize(lDir + viewDir);
+                float spec = pow(max(dot(nor, halfV), 0.0), 32.0);
+
+                cavityLights += orbColors[k] * (nDotL * bedrockAlbedo * 3.2 + spec * 2.0) * atten * ao;
+            }
+            sceneColor += cavityLights * u_orbIntensity * orbAudio;
         }
 
         // Subtle optional emissive veins with bass pulse
         if (u_emissiveVeins > 0.01) {
             float vein = pow(clamp(1.0 - finalTrap.y * 3.0, 0.0, 1.0), 4.0);
             float veinAudio = 1.0 + (u_audioBass * 1.2 + u_audioBeat * 1.0) * u_audioGlowMod;
-            sceneColor += surfaceAlbedo * vein * u_emissiveVeins * 0.3 * veinAudio;
+            sceneColor += bedrockAlbedo * vein * u_emissiveVeins * 0.3 * veinAudio;
         }
 
         // Distance fog smoothly dissolving into deep space background (evaluated only near horizon for massive FPS gain)
@@ -310,7 +394,7 @@ void main() {
         sceneColor = renderSpaceBackground(rayDir, u_lightDir, u_time);
     }
 
-    // Additive volumetric glow (cool atmospheric mist + self-lit core color bleeding)
+    // Additive volumetric glow
     sceneColor += glowAccum;
     sceneColor += godrays * vec3(0.9, 0.85, 0.7);
 

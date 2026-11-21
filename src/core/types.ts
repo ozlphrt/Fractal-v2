@@ -34,15 +34,6 @@ export interface PalettePreset {
   d: [number, number, number];
 }
 
-export const CORE_THEMES: Record<string, [number, number, number]> = {
-  amber: [1.0, 0.62, 0.18],     // Solar Amber (Incandescent Warmth)
-  cyan: [0.18, 0.85, 1.0],      // Electric Cyber Cyan
-  magenta: [1.0, 0.22, 0.78],   // Plasma Magenta / Neon Violet
-  emerald: [0.20, 1.0, 0.55],   // Bioluminescent Emerald
-  gold: [1.0, 0.82, 0.30],      // Molten Imperial Gold
-  white: [0.95, 0.98, 1.0]      // Starlight Supernova
-};
-
 export interface RenderSettings {
   // Optics & Physics
   focalDistance: number;
@@ -52,11 +43,9 @@ export interface RenderSettings {
   subsurface: number;
   emissiveVeins: number;
 
-  // Multi-Material Core & Self-Lit Glowing Elements
-  coreGlow: number;          // Luminescence of micro-cores (0.0 - 4.0, default 1.40)
-  coreThreshold: number;     // Size/density threshold (0.05 - 0.50, default 0.22)
-  coreTheme: string;         // 'amber' | 'cyan' | 'magenta' | 'emerald' | 'gold' | 'white'
-  corePolish: number;        // Core specular polish & sharpness (0.0 - 1.0, default 0.85)
+  // Flying Cavity Lights (Photon Orbs)
+  orbIntensity: number;      // Intensity of flying cavity light sources (0.0 - 3.0, default 1.20)
+  orbSpeed: number;          // Speed of cavity light orbs (0.1 - 3.0, default 1.00)
 
   // Post & Bloom
   bloomIntensity: number;
