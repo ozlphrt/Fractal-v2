@@ -417,13 +417,15 @@ export class Raymarcher {
 
     // Audio Reactivity Uniforms
     const audioActive = (settings.audioEnabled && audioMetrics?.active) ? 1.0 : 0.0;
-    const sens = settings.audioSensitivity ?? 1.0;
+    const sens = settings.audioSensitivity ?? 1.4;
     const bass = (audioMetrics?.bass ?? 0.0) * audioActive * sens;
     const mid = (audioMetrics?.mid ?? 0.0) * audioActive * sens;
     const treble = (audioMetrics?.treble ?? 0.0) * audioActive * sens;
     const level = (audioMetrics?.level ?? 0.0) * audioActive * sens;
     const beat = (audioMetrics?.beat ?? 0.0) * audioActive * sens;
-    const glowMod = (settings.audioGlow ?? 0.40) * audioActive;
+    const glowMod = (settings.audioGlow ?? 0.80) * audioActive;
+    const warpMod = (settings.audioWarp ?? 0.85) * audioActive;
+    const colorShiftMod = (settings.audioColorShift ?? 0.75) * audioActive;
 
     set1f('u_audioBass', bass);
     set1f('u_audioMid', mid);
@@ -431,6 +433,8 @@ export class Raymarcher {
     set1f('u_audioLevel', level);
     set1f('u_audioBeat', beat);
     set1f('u_audioGlowMod', glowMod);
+    set1f('u_audioWarp', warpMod);
+    set1f('u_audioColorShift', colorShiftMod);
 
     // Palette presets
     set3f('u_palA', palette.a[0], palette.a[1], palette.a[2]);
@@ -438,19 +442,38 @@ export class Raymarcher {
     set3f('u_palC', palette.c[0], palette.c[1], palette.c[2]);
     set3f('u_palD', palette.d[0], palette.d[1], palette.d[2]);
 
-    // Custom formula parameters (with visible, organic breathing when audio is active)
-    const breathStrength = (settings.audioBreathing ?? 0.60) * audioActive;
+    // Custom formula parameters (with serious multi-dimensional audio mutations)
+    const breathStrength = (settings.audioBreathing ?? 0.90) * audioActive;
+    const mutStrength = (settings.audioMutation ?? 1.20) * audioActive;
     let paramIndex = 0;
     for (const p of formula.params) {
       let val = formulaParams[p.id] ?? p.default;
       if (p.type === 'int') {
         set1i(p.uniform, Math.round(val));
       } else {
-        // Visible organic breathing on primary shape parameters (up to ±14% smooth expansion on bass/mid beats)
-        if (breathStrength > 0.01 && paramIndex < 3) {
-          const pulse = (bass * 0.75 + mid * 0.35 + beat * 0.40) * 0.14 * breathStrength;
-          val = val * (1.0 + (paramIndex === 0 ? pulse : -pulse * 0.55));
+        const span = Math.abs(p.max - p.min) || 1.0;
+        if (paramIndex === 0 && breathStrength > 0.01) {
+          // Primary shape dimension: powerful expansion on bass & kick drops (up to +25%)
+          const pulse = (bass * 0.85 + beat * 0.50) * 0.22 * breathStrength;
+          val = val * (1.0 + pulse);
+        } else if (mutStrength > 0.01) {
+          // Serious topological mutations across secondary shape parameters
+          if (paramIndex === 1) {
+            // Fold limit / minor radius / twist: counter-flexing contraction
+            const flex = (mid * 0.70 + beat * 0.40) * 0.20 * mutStrength;
+            val = val * (1.0 - flex);
+          } else if (paramIndex === 2) {
+            // Min radius / fluting / thickness: treble facet modulation
+            const shimmer = (treble * 0.80 + beat * 0.35) * 0.24 * mutStrength;
+            val = val * (1.0 + shimmer);
+          } else if (paramIndex >= 3) {
+            // Julia offsets / angles / harmonics: dynamic harmonic orbit displacement
+            const phase = paramIndex * 1.57;
+            const orbitDelta = Math.sin(time * 3.0 + phase) * (bass * 0.5 + mid * 0.5) * (span * 0.12) * mutStrength;
+            val = val + orbitDelta;
+          }
         }
+        val = Math.max(p.min * 0.8, Math.min(p.max * 1.2, val));
         set1f(p.uniform, val);
         paramIndex++;
       }

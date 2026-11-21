@@ -56,13 +56,15 @@ uniform float u_godraysIntensity;
 uniform float u_boundRadius;
 uniform int u_maxSteps;
 
-// Audio Reactivity Uniforms
+// Audio Reactivity & Structural Mutation Uniforms
 uniform float u_audioBass;
 uniform float u_audioMid;
 uniform float u_audioTreble;
 uniform float u_audioLevel;
 uniform float u_audioBeat;
+uniform float u_audioWarp;
 uniform float u_audioGlowMod;
+uniform float u_audioColorShift;
 
 // Natural Geological Cosine Palette
 uniform vec3 u_palA;
@@ -77,6 +79,23 @@ ${COMMON_GLSL}
 
 // Injected formula distance estimator
 ${formula.glslDE}
+
+// Acoustic 3D standing wave & torsional domain mutation
+vec3 warpDomain(vec3 p) {
+    if (u_audioWarp > 0.001) {
+        // Torsional twist around vertical axis driven by mid & beat frequencies
+        float twistAngle = p.y * (u_audioMid * 0.40 + u_audioBeat * 0.30) * u_audioWarp;
+        float ct = cos(twistAngle), st = sin(twistAngle);
+        p.xz = mat2(ct, -st, st, ct) * p.xz;
+        // Acoustic standing wave ripple driven by heavy sub-bass
+        p += sin(p.zxy * 3.8 + u_time * 2.2) * (u_audioBass * 0.085 * u_audioWarp);
+    }
+    return p;
+}
+
+float evalSceneDE(vec3 p, out vec4 trap) {
+    return mapFractal(warpDomain(p), trap);
+}
 
 // Bounding Sphere intersection test: skips empty space
 vec2 intersectSphere(vec3 ro, vec3 rd, float radius) {
@@ -93,10 +112,10 @@ vec3 calcNormal(vec3 p, float eps) {
     const vec2 k = vec2(1.0, -1.0);
     vec4 t;
     return normalize(
-        k.xyy * mapFractal(p + k.xyy * eps, t) +
-        k.yyx * mapFractal(p + k.yyx * eps, t) +
-        k.yxy * mapFractal(p + k.yxy * eps, t) +
-        k.xxx * mapFractal(p + k.xxx * eps, t)
+        k.xyy * evalSceneDE(p + k.xyy * eps, t) +
+        k.yyx * evalSceneDE(p + k.yyx * eps, t) +
+        k.yxy * evalSceneDE(p + k.yxy * eps, t) +
+        k.xxx * evalSceneDE(p + k.xxx * eps, t)
     );
 }
 
@@ -108,7 +127,7 @@ float calcShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
     vec4 trap;
     for (int i = 0; i < 10; i++) {
         if (t >= maxt) break;
-        float h = mapFractal(ro + rd * t, trap);
+        float h = evalSceneDE(ro + rd * t, trap);
         if (h < 0.0005) return 0.0;
         float y = h * h / (2.0 * ph);
         float d = sqrt(max(0.0, h * h - y * y));
@@ -128,7 +147,7 @@ float calcAO(vec3 pos, vec3 nor, vec2 jitter) {
     float randOffset = fract(sin(dot(pos.xy + jitter, vec2(12.9898, 78.233))) * 43758.5453);
     for (int i = 0; i < 4; i++) {
         float h = 0.025 + (0.11 + 0.025 * randOffset) * float(i);
-        float d = mapFractal(pos + h * nor, trap);
+        float d = evalSceneDE(pos + h * nor, trap);
         occ += max(0.0, h - d) * sca;
         sca *= 0.70;
     }
@@ -174,7 +193,7 @@ void main() {
     for (int i = 0; i < 350; i++) {
         if (i >= maxIters || t > maxDist) break;
         vec3 currPos = rayOrigin + rayDir * t;
-        float d = mapFractal(currPos, trap);
+        float d = evalSceneDE(currPos, trap);
 
         // Calibrated volumetric step glow with organic audio breathing
         if (u_glowIntensity > 0.001 && d < 0.35) {
@@ -210,9 +229,10 @@ void main() {
         vec3 nor = calcNormal(hitPos, normEps);
         vec3 viewDir = -rayDir;
         
-        // Natural Geological Surface Coloring
+        // Natural Geological Surface Coloring with dynamic audio phase cascade
         float trapVal = finalTrap.x;
-        float tCoord = trapVal * 0.45;
+        float colorFlow = (u_audioLevel * 0.45 + u_audioBeat * 0.35) * u_audioColorShift;
+        float tCoord = trapVal * 0.45 + colorFlow;
         vec3 albedo = clamp(cosinePalette(tCoord, u_palA, u_palB, u_palC, u_palD), 0.0, 1.0);
 
         // Diffuse & Specular Lighting

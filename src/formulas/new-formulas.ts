@@ -1,5 +1,5 @@
-// src/formulas/new-formulas.ts
 // Mathematical definitions for new fractal formulas across advanced mathematical families:
+// src/formulas/new-formulas.ts
 // 1. Mandelbox & Tglad Folds (MBOX)
 // 2. Triply Periodic Minimal Surfaces (TPMS)
 // 3. Clifford Torus, Hopf Fibrations & Helical Manifolds (HOPF)

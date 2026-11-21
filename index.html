@@ -146,7 +146,7 @@
           <button class="tab-btn" data-tab="tab-lighting">Lighting</button>
           <button class="tab-btn" data-tab="tab-materials">Materials</button>
           <button class="tab-btn" data-tab="tab-params">Fractal Math</button>
-          <button class="tab-btn" data-tab="tab-audio">Audio</button>
+          <button class="tab-btn" data-tab="tab-audio">Sound</button>
         </nav>
 
         <div class="drawer-content">
@@ -427,11 +427,11 @@
             </div>
           </div>
 
-          <!-- Audio Reactivity Tab -->
+          <!-- Sound & Mutation Matrix Tab -->
           <div class="tab-pane" id="tab-audio">
             <div class="control-section">
               <span class="section-tag">STREAM SOURCE</span>
-              <h3>Audio Input & Streams</h3>
+              <h3>Audio Input & Presets</h3>
               <div class="control-row">
                 <label>Audio Source</label>
                 <div class="segmented-control" id="audio-source-segmented" style="display: flex; gap: 4px; grid-column: span 2;">
@@ -445,30 +445,114 @@
                 <label>Active Track</label>
                 <span class="val-display" id="audio-track-name" style="grid-column: span 2; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a0aec0;">None (Off)</span>
               </div>
+              <div class="control-row" style="margin-top: 10px;">
+                <label>Quick Presets</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; grid-column: span 2;">
+                  <button class="studio-btn-action" id="btn-sound-preset-radical" title="Deep topological mutation & bass warp" style="padding: 5px;">🔥 Radical Morph</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-flow" title="Acoustic harmonic twist and color flow" style="padding: 5px;">🌊 Harmonic Flow</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-cathedral" title="Dramatic godrays & bloom flare" style="padding: 5px;">✨ Cathedral Pulse</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-subtle" title="Gentle organic breathing" style="padding: 5px;">🍃 Subtle Rest</button>
+                </div>
+              </div>
             </div>
 
+            <!-- Real-time Live VU Frequency Meters -->
             <div class="control-section">
-              <span class="section-tag">ORGANIC DYNAMICS</span>
-              <h3>Responsive Breathing & Dynamics</h3>
+              <span class="section-tag">LIVE TELEMETRY</span>
+              <h3>Frequency Spectrum VU</h3>
+              <div class="sound-vu-container" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                <div class="vu-row">
+                  <div class="vu-label-row" style="display: flex; justify-content: space-between; font-size: 0.68rem; margin-bottom: 2px;">
+                    <span style="color: #60a5fa; font-weight: 600;">SUB-BASS (Kicks / Heavy Low)</span>
+                    <span id="vu-val-bass" style="font-family: var(--font-mono); color: #94a3b8;">0%</span>
+                  </div>
+                  <div class="vu-track" style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;">
+                    <div id="vu-bar-bass" style="width: 0%; height: 100%; background: linear-gradient(90deg, #2563eb, #38bdf8); transition: width 0.05s ease;"></div>
+                  </div>
+                </div>
+
+                <div class="vu-row">
+                  <div class="vu-label-row" style="display: flex; justify-content: space-between; font-size: 0.68rem; margin-bottom: 2px;">
+                    <span style="color: #a78bfa; font-weight: 600;">MID-RANGE (Synths / Vocals)</span>
+                    <span id="vu-val-mid" style="font-family: var(--font-mono); color: #94a3b8;">0%</span>
+                  </div>
+                  <div class="vu-track" style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;">
+                    <div id="vu-bar-mid" style="width: 0%; height: 100%; background: linear-gradient(90deg, #7c3aed, #c084fc); transition: width 0.05s ease;"></div>
+                  </div>
+                </div>
+
+                <div class="vu-row">
+                  <div class="vu-label-row" style="display: flex; justify-content: space-between; font-size: 0.68rem; margin-bottom: 2px;">
+                    <span style="color: #34d399; font-weight: 600;">HIGH-TREBLE (Hats / Shimmer)</span>
+                    <span id="vu-val-treb" style="font-family: var(--font-mono); color: #94a3b8;">0%</span>
+                  </div>
+                  <div class="vu-track" style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;">
+                    <div id="vu-bar-treb" style="width: 0%; height: 100%; background: linear-gradient(90deg, #059669, #34d399); transition: width 0.05s ease;"></div>
+                  </div>
+                </div>
+
+                <div class="vu-row">
+                  <div class="vu-label-row" style="display: flex; justify-content: space-between; font-size: 0.68rem; margin-bottom: 2px;">
+                    <span style="color: #f43f5e; font-weight: 600;">BEAT IMPULSE (Transient Hit)</span>
+                    <span id="vu-val-beat" style="font-family: var(--font-mono); color: #94a3b8;">0%</span>
+                  </div>
+                  <div class="vu-track" style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;">
+                    <div id="vu-bar-beat" style="width: 0%; height: 100%; background: linear-gradient(90deg, #e11d48, #fb7185); transition: width 0.05s ease;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Structural Mutation & Warping -->
+            <div class="control-section">
+              <span class="section-tag">TOPOLOGICAL MUTATION</span>
+              <h3>Geometric Deformation & Warping</h3>
               <div class="control-row">
-                <label>Master Sensitivity</label>
-                <input type="range" id="param-audio-sens" min="0.2" max="2.5" step="0.05" value="1.25">
-                <span class="val-display" id="val-audio-sens">1.25</span>
+                <label>Shape Mutation</label>
+                <input type="range" id="param-audio-mutation" min="0.0" max="2.5" step="0.05" value="1.20">
+                <span class="val-display" id="val-audio-mutation">1.20</span>
               </div>
               <div class="control-row">
-                <label>Fractal Math Breathing</label>
-                <input type="range" id="param-audio-breath" min="0.0" max="1.5" step="0.02" value="0.65">
-                <span class="val-display" id="val-audio-breath">0.65</span>
+                <label>Acoustic Twist & Warp</label>
+                <input type="range" id="param-audio-warp" min="0.0" max="2.0" step="0.05" value="0.85">
+                <span class="val-display" id="val-audio-warp">0.85</span>
               </div>
+              <div class="control-row">
+                <label>Scale Breathing</label>
+                <input type="range" id="param-audio-breath" min="0.0" max="2.0" step="0.05" value="0.90">
+                <span class="val-display" id="val-audio-breath">0.90</span>
+              </div>
+            </div>
+
+            <!-- Atmosphere, Lighting & Color -->
+            <div class="control-section">
+              <span class="section-tag">ATMOSPHERE & COLOR</span>
+              <h3>Volumetrics & Mineral Flashing</h3>
+              <div class="control-row">
+                <label>Godrays & Glow Pulse</label>
+                <input type="range" id="param-audio-glow" min="0.0" max="2.0" step="0.05" value="0.80">
+                <span class="val-display" id="val-audio-glow">0.80</span>
+              </div>
+              <div class="control-row">
+                <label>Palette Mineral Flow</label>
+                <input type="range" id="param-audio-color" min="0.0" max="2.0" step="0.05" value="0.75">
+                <span class="val-display" id="val-audio-color">0.75</span>
+              </div>
+            </div>
+
+            <!-- Dynamics & Camera -->
+            <div class="control-section">
+              <span class="section-tag">CAMERA DYNAMICS</span>
+              <h3>Subwoofer Punch & Gain</h3>
               <div class="control-row">
                 <label>Beat Camera Punch</label>
-                <input type="range" id="param-audio-punch" min="0.0" max="1.0" step="0.02" value="0.50">
-                <span class="val-display" id="val-audio-punch">0.50</span>
+                <input type="range" id="param-audio-punch" min="0.0" max="2.0" step="0.05" value="0.70">
+                <span class="val-display" id="val-audio-punch">0.70</span>
               </div>
               <div class="control-row">
-                <label>Volumetric Godrays & Glow</label>
-                <input type="range" id="param-audio-glow" min="0.0" max="1.5" step="0.02" value="0.60">
-                <span class="val-display" id="val-audio-glow">0.60</span>
+                <label>Master Sensitivity</label>
+                <input type="range" id="param-audio-sens" min="0.2" max="3.0" step="0.05" value="1.40">
+                <span class="val-display" id="val-audio-sens">1.40</span>
               </div>
             </div>
 
