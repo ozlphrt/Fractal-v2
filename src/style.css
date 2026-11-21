@@ -1530,6 +1530,12 @@ input[type="range"]:active::-webkit-slider-thumb {
   transition: color 0.18s ease;
 }
 
+.audio-chip-btn:focus,
+.audio-chip-btn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .audio-chip-btn:hover {
   color: var(--text-primary);
 }
@@ -1629,6 +1635,12 @@ input[type="range"]:active::-webkit-slider-thumb {
   border-radius: 50%;
   padding: 0;
   transition: all 0.18s ease;
+}
+
+.audio-chip-action:focus,
+.audio-chip-action:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .audio-chip-action:hover {

@@ -73,9 +73,13 @@ uniform vec3 u_palD;
 
 // Flying Cavity Lights (Photon Orbs)
 uniform float u_orbIntensity;
-uniform float u_orbSpeed;
 uniform float u_orbRadius;
-uniform float u_orbTail;
+uniform vec3 u_orbPos0;
+uniform vec3 u_orbPos1;
+uniform vec3 u_orbPos2;
+uniform vec3 u_orbTail0;
+uniform vec3 u_orbTail1;
+uniform vec3 u_orbTail2;
 uniform vec3 u_orbCol0;
 uniform vec3 u_orbCol1;
 uniform vec3 u_orbCol2;
@@ -135,54 +139,6 @@ float calcAO(vec3 pos, vec3 nor, vec2 jitter) {
     return clamp(1.0 - 1.6 * occ, 0.0, 1.0);
 }
 
-// Parametric orbital probe rays (starts in guaranteed empty space outside the bounding sphere)
-void getOrbProbeRay(int idx, float time, out vec3 ro, out vec3 rd, out float targetDepth) {
-    float t = time * u_orbSpeed;
-    if (idx == 0) {
-        // Orb 0: Circumnavigates the perimeter in an undulating orbital loop
-        float s = t * 0.42;
-        vec3 dir = normalize(vec3(cos(s), 0.52 * sin(s * 2.2), sin(s)));
-        ro = dir * 3.4;
-        rd = -dir;
-        targetDepth = 1.6 + 1.2 * sin(s * 1.7);
-    } else if (idx == 1) {
-        // Orb 1: Swoops across the polar corridors and diagonal hollows
-        float s = t * 0.48 + 2.1;
-        vec3 dir = normalize(vec3(0.55 * sin(s * 2.4), cos(s), sin(s * 1.1)));
-        ro = dir * 3.5;
-        rd = -dir;
-        targetDepth = 1.7 + 1.3 * cos(s * 1.5);
-    } else {
-        // Orb 2: Rosette path dipping into lateral crevices and gaps
-        float s = t * 0.36 + 4.3;
-        vec3 dir = normalize(vec3(sin(s * 1.3), 0.62 * cos(s * 2.7), cos(s * 1.3)));
-        ro = dir * 3.3;
-        rd = -dir;
-        targetDepth = 1.6 + 1.2 * sin(s * 2.1);
-    }
-}
-
-// Inward-marching ray from outer space that stops at safe clearance before any wall
-// Guaranteed to stay in empty space, cavities, and gaps without ever penetrating walls
-vec3 getSurfaceConformingOrbPos(int idx, float time, float clearance) {
-    vec3 ro, rd;
-    float targetDepth;
-    getOrbProbeRay(idx, time, ro, rd, targetDepth);
-    
-    float t = 0.0;
-    vec4 trap;
-    for (int i = 0; i < 14; i++) {
-        vec3 p = ro + rd * t;
-        float d = mapFractal(p, trap);
-        if (d < clearance) {
-            return ro + rd * max(0.0, t - (clearance - d + 0.008));
-        }
-        t += max(d * 0.85, 0.035);
-        if (t >= targetDepth) break;
-    }
-    return ro + rd * min(t, targetDepth);
-}
-
 // Distance to 3D line segment with projection parameter h in [0, 1]
 float distToSegment(vec3 p, vec3 a, vec3 b, out float h) {
     vec3 pa = p - a;
@@ -216,29 +172,6 @@ void main() {
     vec3 rayOrigin = u_camPos + cu * lensOffset.x + cv * lensOffset.y;
     vec3 rayDir = normalize(focalPoint - rayOrigin);
 
-    // Trajectory positions for 3 flying cavity light orbs (with collision avoidance & fading tails)
-    vec3 orb0 = vec3(0.0);
-    vec3 orb1 = vec3(0.0);
-    vec3 orb2 = vec3(0.0);
-    vec3 tail0_end = vec3(0.0);
-    vec3 tail1_end = vec3(0.0);
-    vec3 tail2_end = vec3(0.0);
-
-    float safeMargin = max(u_orbRadius * 2.2, 0.045);
-    if (u_orbIntensity > 0.001) {
-        orb0 = getSurfaceConformingOrbPos(0, u_time, safeMargin);
-        vec3 orb0_prev = getSurfaceConformingOrbPos(0, u_time - 0.07, safeMargin);
-        tail0_end = orb0 - normalize(orb0 - orb0_prev + vec3(1e-5)) * (0.24 * u_orbTail * u_orbSpeed);
-
-        orb1 = getSurfaceConformingOrbPos(1, u_time, safeMargin);
-        vec3 orb1_prev = getSurfaceConformingOrbPos(1, u_time - 0.07, safeMargin);
-        tail1_end = orb1 - normalize(orb1 - orb1_prev + vec3(1e-5)) * (0.24 * u_orbTail * u_orbSpeed);
-
-        orb2 = getSurfaceConformingOrbPos(2, u_time, safeMargin);
-        vec3 orb2_prev = getSurfaceConformingOrbPos(2, u_time - 0.07, safeMargin);
-        tail2_end = orb2 - normalize(orb2 - orb2_prev + vec3(1e-5)) * (0.24 * u_orbTail * u_orbSpeed);
-    }
-
     // Primary raymarch traversal (no artificial bounding sphere clipping to prevent corner cut-offs)
     float t = 0.02;
     float maxDist = 18.0;
@@ -265,36 +198,42 @@ void main() {
 
         // Distance to the 3 flying luminous orbs (using u_orbRadius)
         if (u_orbIntensity > 0.001) {
-            dOrb0 = length(currPos - orb0) - u_orbRadius;
-            dOrb1 = length(currPos - orb1) - u_orbRadius;
-            dOrb2 = length(currPos - orb2) - u_orbRadius;
+            dOrb0 = length(currPos - u_orbPos0) - u_orbRadius;
+            dOrb1 = length(currPos - u_orbPos1) - u_orbRadius;
+            dOrb2 = length(currPos - u_orbPos2) - u_orbRadius;
             dOrbs = min(dOrb0, min(dOrb1, dOrb2));
         }
 
         float d = (u_orbIntensity > 0.001) ? min(dFractal, dOrbs) : dFractal;
 
-        // Volumetric atmospheric halo and fading comet tails around flying light orbs
+        // Subtle, localized volumetric comet tail mist - strictly bounded so it NEVER blows out the scene
         if (u_orbIntensity > 0.001) {
-            float haloAudio = 1.0 + (u_audioBass * 1.1 + u_audioBeat * 1.4) * u_audioGlowMod;
-            float orbGlowScale = 0.00030 * u_orbIntensity * haloAudio;
+            float tailHaloRadius = max(0.05, u_orbRadius * 3.6);
+            float orbAudioMod = 1.0 + (u_audioBass * 0.65 + u_audioBeat * 0.75) * u_audioGlowMod;
 
             // Orb 0 Head & Fading Tail
             float h0;
-            float dTail0 = distToSegment(currPos, tail0_end, orb0, h0);
-            float fade0 = pow(h0, 1.8);
-            glowAccum += u_orbCol0 * (fade0 * orbGlowScale / (dTail0 * dTail0 + mix(0.0022, 0.0006, h0)));
+            float dTail0 = distToSegment(currPos, u_orbTail0, u_orbPos0, h0);
+            if (dTail0 < tailHaloRadius) {
+                float mist0 = 1.0 - dTail0 / tailHaloRadius;
+                glowAccum += u_orbCol0 * (mist0 * mist0 * pow(h0, 1.8) * 0.038 * u_orbIntensity * orbAudioMod);
+            }
 
             // Orb 1 Head & Fading Tail
             float h1;
-            float dTail1 = distToSegment(currPos, tail1_end, orb1, h1);
-            float fade1 = pow(h1, 1.8);
-            glowAccum += u_orbCol1 * (fade1 * orbGlowScale / (dTail1 * dTail1 + mix(0.0022, 0.0006, h1)));
+            float dTail1 = distToSegment(currPos, u_orbTail1, u_orbPos1, h1);
+            if (dTail1 < tailHaloRadius) {
+                float mist1 = 1.0 - dTail1 / tailHaloRadius;
+                glowAccum += u_orbCol1 * (mist1 * mist1 * pow(h1, 1.8) * 0.038 * u_orbIntensity * orbAudioMod);
+            }
 
             // Orb 2 Head & Fading Tail
             float h2;
-            float dTail2 = distToSegment(currPos, tail2_end, orb2, h2);
-            float fade2 = pow(h2, 1.8);
-            glowAccum += u_orbCol2 * (fade2 * orbGlowScale / (dTail2 * dTail2 + mix(0.0022, 0.0006, h2)));
+            float dTail2 = distToSegment(currPos, u_orbTail2, u_orbPos2, h2);
+            if (dTail2 < tailHaloRadius) {
+                float mist2 = 1.0 - dTail2 / tailHaloRadius;
+                glowAccum += u_orbCol2 * (mist2 * mist2 * pow(h2, 1.8) * 0.038 * u_orbIntensity * orbAudioMod);
+            }
         }
 
         // Calibrated volumetric step glow with organic audio breathing
@@ -336,13 +275,12 @@ void main() {
         vec3 orbCoreCol = (hitOrbIdx == 0) ? u_orbCol0 :
                           (hitOrbIdx == 1) ? u_orbCol1 :
                                              u_orbCol2;
-        float orbAudio = 1.0 + (u_audioBass * 1.4 + u_audioBeat * 1.8) * u_audioGlowMod;
-        sceneColor = orbCoreCol * (6.5 * u_orbIntensity * orbAudio);
+        float orbAudio = 1.0 + (u_audioBass * 1.1 + u_audioBeat * 1.3) * u_audioGlowMod;
+        sceneColor = orbCoreCol * (2.8 * u_orbIntensity * orbAudio);
         sceneColor += glowAccum;
         sceneColor += godrays * vec3(0.9, 0.85, 0.7);
         fragColor = vec4(sceneColor, 1.0);
         return;
-    }
     }
 
     if (hit) {
@@ -415,40 +353,47 @@ void main() {
         // 5. Dynamic Flying Cavity Lights (Lighting Neighboring Surfaces with Line-of-Sight Occlusion)
         if (u_orbIntensity > 0.001) {
             vec3 orbPositions[3];
-            orbPositions[0] = orb0;
-            orbPositions[1] = orb1;
-            orbPositions[2] = orb2;
+            orbPositions[0] = u_orbPos0;
+            orbPositions[1] = u_orbPos1;
+            orbPositions[2] = u_orbPos2;
 
             vec3 orbColors[3];
             orbColors[0] = u_orbCol0;
             orbColors[1] = u_orbCol1;
             orbColors[2] = u_orbCol2;
 
-            float orbAudio = 1.0 + (u_audioBass * 0.85 + u_audioBeat * 1.1) * u_audioGlowMod;
+            float orbAudio = 1.0 + (u_audioBass * 0.55 + u_audioBeat * 0.70) * u_audioGlowMod;
             vec3 cavityLights = vec3(0.0);
+            float maxLightRadius = 0.38;
 
             for (int k = 0; k < 3; k++) {
                 vec3 toOrb = orbPositions[k] - hitPos;
                 float dOrb = length(toOrb);
-                vec3 lDir = toOrb / max(dOrb, 1e-4);
-                float nDotL = max(dot(nor, lDir), 0.0);
+                if (dOrb < maxLightRadius) {
+                    vec3 lDir = toOrb / max(dOrb, 1e-4);
+                    float nDotL = max(dot(nor, lDir), 0.0);
 
-                // 3-step line-of-sight visibility test: light cannot shine through solid walls
-                float orbVis = 1.0;
-                if (nDotL > 0.015 && dOrb > 0.06) {
-                    float stepLen = dOrb * 0.28;
-                    vec4 tTrap;
-                    for (int s = 1; s <= 3; s++) {
-                        float sd = mapFractal(hitPos + nor * 0.015 + lDir * (float(s) * stepLen), tTrap);
-                        if (sd < 0.006) { orbVis = 0.0; break; }
+                    // 3-step line-of-sight visibility test: light cannot shine through solid walls
+                    float orbVis = 1.0;
+                    if (nDotL > 0.015 && dOrb > 0.04) {
+                        float stepLen = dOrb * 0.28;
+                        vec4 tTrap;
+                        for (int s = 1; s <= 3; s++) {
+                            float sd = mapFractal(hitPos + nor * 0.012 + lDir * (float(s) * stepLen), tTrap);
+                            if (sd < 0.005) { orbVis = 0.0; break; }
+                        }
                     }
+
+                    // Windowed quadratic attenuation: exactly 0.0 at maxLightRadius to avoid broad scene washing
+                    float normDist = dOrb / maxLightRadius;
+                    float window = clamp(1.0 - normDist * normDist, 0.0, 1.0);
+                    float atten = (window * window) / (1.0 + 16.0 * normDist * normDist);
+
+                    vec3 halfV = normalize(lDir + viewDir);
+                    float spec = pow(max(dot(nor, halfV), 0.0), 24.0);
+
+                    cavityLights += orbColors[k] * (nDotL * bedrockAlbedo * 0.95 + spec * 0.60) * atten * ao * orbVis;
                 }
-
-                float atten = 1.0 / (1.0 + 3.0 * dOrb + 5.2 * dOrb * dOrb);
-                vec3 halfV = normalize(lDir + viewDir);
-                float spec = pow(max(dot(nor, halfV), 0.0), 32.0);
-
-                cavityLights += orbColors[k] * (nDotL * bedrockAlbedo * 3.2 + spec * 2.0) * atten * ao * orbVis;
             }
             sceneColor += cavityLights * u_orbIntensity * orbAudio;
         }
