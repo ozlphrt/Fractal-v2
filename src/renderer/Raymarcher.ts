@@ -253,6 +253,17 @@ export class Raymarcher {
     this.lastFormula = formula;
     this.lastParams = { ...formulaParams };
 
+    // Decay transitionWeight smoothly over time unless driven in lockstep by HUD
+    if (this.transitionWeight > 0.0) {
+      const decay = _dt / Math.max(0.1, this.crossfadeDuration);
+      this.transitionWeight = Math.max(0.0, this.transitionWeight - decay);
+      if (this.transitionWeight <= 0.001) {
+        this.transitionWeight = 0.0;
+        this.prevFormula = null;
+        this.prevProgram = null;
+      }
+    }
+
     // Consistent 135 raymarching steps across both passes eliminates any geometry/depth pop
     const maxSteps = 135;
     if (this.prevFormula && this.prevProgram && this.transitionFBO && this.transitionWeight > 0.001) {

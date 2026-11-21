@@ -1026,13 +1026,17 @@ export class HUD {
       if (values.fogDensity !== undefined) this.setRangeValue('param-fog', 'val-fog', this.settings.fogDensity = values.fogDensity);
       if (values.godraysIntensity !== undefined) this.setRangeValue('param-godrays', 'val-godrays', this.settings.godraysIntensity = values.godraysIntensity);
     } else if (tabId === 'tab-params') {
+      // In Random Mode, keep user's live formula parameters intact during flythrough
+      if (this.isRandomMode) return;
       // Only apply keys that belong to the active formula's parameters. Writing other keys
       // (lighting, optics...) into dynamicParamValues would shadow live slider values in getAllValues().
       const paramIds = new Set(this.getActiveFormula().params.map(p => p.id));
       for (const [key, val] of Object.entries(values)) {
         if (!paramIds.has(key)) continue;
-        this.dynamicParamValues[key] = val;
         const input = document.getElementById(`dyn-param-${key}`) as HTMLInputElement;
+        // Never overwrite a slider while the user is actively focusing or adjusting it
+        if (input && document.activeElement === input) continue;
+        this.dynamicParamValues[key] = val;
         const disp = document.getElementById(`dyn-val-${key}`);
         if (input) input.value = String(val);
         if (disp) {
@@ -1621,6 +1625,9 @@ export class HUD {
       const valDisp = row.querySelector('.val-display')!;
 
       input.addEventListener('input', () => {
+        if (!this.isRandomMode && (this.tourActive || this.keyframeEngine.isPlaying)) {
+          this.stopTour();
+        }
         const v = parseFloat(input.value);
         this.dynamicParamValues[p.id] = v;
         valDisp.textContent = isInt ? Math.round(v).toString() : v.toFixed(decimals);
@@ -1630,6 +1637,9 @@ export class HUD {
       // Mouse wheel fine-tuning on formula parameter sliders
       input.addEventListener('wheel', (e) => {
         e.preventDefault();
+        if (!this.isRandomMode && (this.tourActive || this.keyframeEngine.isPlaying)) {
+          this.stopTour();
+        }
         const delta = e.deltaY < 0 ? 1 : -1;
         const span = p.max - p.min;
         const baseStep = isInt ? 1 : Math.max(0.001, span * 0.005);
