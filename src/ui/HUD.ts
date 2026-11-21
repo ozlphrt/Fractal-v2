@@ -94,10 +94,10 @@ export class HUD {
 
       // Audio Reactivity
       audioEnabled: false,
-      audioSensitivity: 1.0,
-      audioBreathing: 0.35,
-      audioBeatPunch: 0.25,
-      audioGlow: 0.40
+      audioSensitivity: 1.25,
+      audioBreathing: 0.65,
+      audioBeatPunch: 0.50,
+      audioGlow: 0.60
     };
 
     // Load any saved defaults from localStorage

@@ -52,6 +52,7 @@ export class AudioEngine {
   private beatValue: number = 0.0;
   private bassHistory: number[] = [];
   private lastBeatTime: number = 0;
+  private peakLevel: number = 0.25;
 
   // Callback on audio state change
   public onStateChange?: (metrics: AudioMetrics) => void;
@@ -292,41 +293,49 @@ export class AudioEngine {
     this.analyser.getByteFrequencyData(this.freqData as any);
 
     // Frequency band bin ranges (256 bins across 0 - 22,050 Hz, ~86 Hz per bin)
-    // 1. Sub-bass & Bass: Bins 1..5 (~86 - 430 Hz)
+    // 1. Sub-bass & Bass: Bins 1..6 (~86 - 510 Hz)
     let sumBass = 0;
-    for (let i = 1; i <= 5; i++) sumBass += this.freqData[i];
-    const rawBass = sumBass / (5 * 255.0);
+    for (let i = 1; i <= 6; i++) sumBass += this.freqData[i];
+    let rawBass = sumBass / (6 * 255.0);
 
-    // 2. Mids: Bins 6..28 (~500 - 2400 Hz)
+    // 2. Mids: Bins 7..35 (~600 - 3000 Hz)
     let sumMid = 0;
-    for (let i = 6; i <= 28; i++) sumMid += this.freqData[i];
-    const rawMid = sumMid / (23 * 255.0);
+    for (let i = 7; i <= 35; i++) sumMid += this.freqData[i];
+    let rawMid = sumMid / (29 * 255.0);
 
-    // 3. Treble: Bins 29..110 (~2500 - 9500 Hz)
+    // 3. Treble: Bins 36..120 (~3100 - 10300 Hz)
     let sumTreble = 0;
-    for (let i = 29; i <= 110; i++) sumTreble += this.freqData[i];
-    const rawTreble = sumTreble / (82 * 255.0);
+    for (let i = 36; i <= 120; i++) sumTreble += this.freqData[i];
+    let rawTreble = sumTreble / (85 * 255.0);
 
     // 4. Overall RMS Level
     const rawLevel = rawBass * 0.45 + rawMid * 0.35 + rawTreble * 0.20;
 
+    // Automatic Gain Control (AGC): adapts to quiet or loud tracks so modulation is always clear
+    this.peakLevel = Math.max(0.12, Math.max(this.peakLevel * 0.994, rawLevel));
+    const gainFactor = Math.min(3.8, 0.75 / Math.max(0.08, this.peakLevel));
+
+    rawBass = Math.min(1.0, Math.pow(rawBass * gainFactor, 1.15) * 1.35);
+    rawMid = Math.min(1.0, Math.pow(rawMid * gainFactor, 1.10) * 1.25);
+    rawTreble = Math.min(1.0, Math.pow(rawTreble * gainFactor, 1.10) * 1.25);
+
     // Asymmetric Attack/Decay Envelope Followers (fast punch, organic smooth release)
-    const attackBass = 0.50, decayBass = 0.09;
+    const attackBass = 0.58, decayBass = 0.08;
     this.smoothBass += (rawBass > this.smoothBass)
       ? (rawBass - this.smoothBass) * attackBass
       : (rawBass - this.smoothBass) * decayBass;
 
-    const attackMid = 0.40, decayMid = 0.08;
+    const attackMid = 0.48, decayMid = 0.07;
     this.smoothMid += (rawMid > this.smoothMid)
       ? (rawMid - this.smoothMid) * attackMid
       : (rawMid - this.smoothMid) * decayMid;
 
-    const attackTreble = 0.60, decayTreble = 0.12;
+    const attackTreble = 0.65, decayTreble = 0.10;
     this.smoothTreble += (rawTreble > this.smoothTreble)
       ? (rawTreble - this.smoothTreble) * attackTreble
       : (rawTreble - this.smoothTreble) * decayTreble;
 
-    this.smoothLevel += (rawLevel - this.smoothLevel) * 0.15;
+    this.smoothLevel += (rawLevel - this.smoothLevel) * 0.18;
 
     // Beat / Transient Onset Detector
     // Keeps a 24-frame moving average of bass energy
@@ -335,13 +344,13 @@ export class AudioEngine {
 
     const avgBass = this.bassHistory.reduce((a, b) => a + b, 0) / this.bassHistory.length;
     const now = performance.now();
-    const threshold = Math.max(0.18, avgBass * 1.35);
+    const threshold = Math.max(0.22, avgBass * 1.28);
 
-    if (rawBass > threshold && rawBass > 0.15 && (now - this.lastBeatTime) > 175) {
+    if (rawBass > threshold && rawBass > 0.20 && (now - this.lastBeatTime) > 165) {
       this.beatValue = 1.0;
       this.lastBeatTime = now;
     } else {
-      this.beatValue *= 0.88; // Exponential beat decay (~140ms duration)
+      this.beatValue *= 0.86; // Exponential beat decay (~150ms duration)
     }
   }
 

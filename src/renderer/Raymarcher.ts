@@ -279,8 +279,9 @@ export class Raymarcher {
     const audioActive = (settings.audioEnabled && audioMetrics?.active) ? 1.0 : 0.0;
     const beat = (audioMetrics?.beat ?? 0.0) * audioActive;
     const mid = (audioMetrics?.mid ?? 0.0) * audioActive;
-    const exposureMod = 1.0 + beat * 0.08 * (settings.audioBeatPunch ?? 0.25);
-    const bloomMod = 1.0 + mid * 0.25 * (settings.audioGlow ?? 0.40);
+    const bass = (audioMetrics?.bass ?? 0.0) * audioActive;
+    const exposureMod = 1.0 + beat * 0.28 * (settings.audioBeatPunch ?? 0.45) + bass * 0.12;
+    const bloomMod = 1.0 + (mid * 0.95 + beat * 0.70) * (settings.audioGlow ?? 0.55);
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;
@@ -437,18 +438,18 @@ export class Raymarcher {
     set3f('u_palC', palette.c[0], palette.c[1], palette.c[2]);
     set3f('u_palD', palette.d[0], palette.d[1], palette.d[2]);
 
-    // Custom formula parameters (with subtle, organic breathing when audio is active)
-    const breathStrength = (settings.audioBreathing ?? 0.35) * audioActive;
+    // Custom formula parameters (with visible, organic breathing when audio is active)
+    const breathStrength = (settings.audioBreathing ?? 0.60) * audioActive;
     let paramIndex = 0;
     for (const p of formula.params) {
       let val = formulaParams[p.id] ?? p.default;
       if (p.type === 'int') {
         set1i(p.uniform, Math.round(val));
       } else {
-        // Subtle organic breathing on primary shape parameters (±3.5% smooth expansion on bass/mid beats)
-        if (breathStrength > 0.01 && paramIndex < 2) {
-          const breathDelta = (bass * 0.7 + mid * 0.3 - 0.22) * 0.038 * breathStrength;
-          val = val * (1.0 + breathDelta);
+        // Visible organic breathing on primary shape parameters (up to ±14% smooth expansion on bass/mid beats)
+        if (breathStrength > 0.01 && paramIndex < 3) {
+          const pulse = (bass * 0.75 + mid * 0.35 + beat * 0.40) * 0.14 * breathStrength;
+          val = val * (1.0 + (paramIndex === 0 ? pulse : -pulse * 0.55));
         }
         set1f(p.uniform, val);
         paramIndex++;
