@@ -371,6 +371,19 @@
                 </button>
               </div>
               <div class="control-row">
+                <label>Color Theme</label>
+                <select id="param-orb-preset" class="studio-select" style="grid-column: span 2; width: 100%;">
+                  <option value="trichrome" selected>Tri-Chromatic (Amber / Cyan / Magenta)</option>
+                  <option value="monochrome_gold">All Same: Incandescent Gold</option>
+                  <option value="monochrome_cyan">All Same: Electric Cyan</option>
+                  <option value="monochrome_white">All Same: Pure Starlight Supernova</option>
+                  <option value="ultraviolet">Ultraviolet & Deep Violet Glow</option>
+                  <option value="blacklight">Blacklight Neon (UV / Acid Green / Pink)</option>
+                  <option value="emerald_bio">Bioluminescent Emerald Spores</option>
+                  <option value="inferno">Inferno & Molten Magma</option>
+                </select>
+              </div>
+              <div class="control-row">
                 <label>Orb Light Intensity</label>
                 <input type="range" id="param-orb-intensity" min="0.0" max="3.0" step="0.05" value="1.20">
                 <span class="val-display" id="val-orb-intensity">1.20</span>
@@ -384,6 +397,11 @@
                 <label>Orb Size (Radius)</label>
                 <input type="range" id="param-orb-radius" min="0.006" max="0.040" step="0.002" value="0.016">
                 <span class="val-display" id="val-orb-radius">0.016</span>
+              </div>
+              <div class="control-row">
+                <label>Fading Tail Length</label>
+                <input type="range" id="param-orb-tail" min="0.0" max="2.5" step="0.05" value="1.00">
+                <span class="val-display" id="val-orb-tail">1.00</span>
               </div>
             </div>
 

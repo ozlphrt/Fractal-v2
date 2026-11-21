@@ -1,7 +1,7 @@
 // src/renderer/Raymarcher.ts
 // Primary WebGL2 rendering coordinator linking Raymarching, Accumulation, and Post-Processing
 
-import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
+import { FormulaDefinition, PalettePreset, RenderSettings, ORB_COLOR_PRESETS } from '../core/types.ts';
 import { RAYMARCH_VERT, buildRaymarchFrag } from './shaders/raymarch.glsl.ts';
 import { Accumulator } from './Accumulator.ts';
 import { PostProcessor } from './PostProcessor.ts';
@@ -391,6 +391,13 @@ export class Raymarcher {
     set1f('u_orbIntensity', orbActive ? (settings.orbIntensity ?? 1.20) : 0.0);
     set1f('u_orbSpeed', settings.orbSpeed ?? 1.00);
     set1f('u_orbRadius', settings.orbRadius ?? 0.016);
+    set1f('u_orbTail', settings.orbTail ?? 1.00);
+
+    const presetKey = settings.orbPreset || 'trichrome';
+    const orbPreset = ORB_COLOR_PRESETS[presetKey] || ORB_COLOR_PRESETS.trichrome;
+    set3f('u_orbCol0', orbPreset.colors[0][0], orbPreset.colors[0][1], orbPreset.colors[0][2]);
+    set3f('u_orbCol1', orbPreset.colors[1][0], orbPreset.colors[1][1], orbPreset.colors[1][2]);
+    set3f('u_orbCol2', orbPreset.colors[2][0], orbPreset.colors[2][1], orbPreset.colors[2][2]);
 
     // Volumetrics & Lighting
     const azRad = (settings.lightAzimuth * Math.PI) / 180.0;

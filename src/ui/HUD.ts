@@ -78,6 +78,8 @@ export class HUD {
       orbIntensity: 1.20,
       orbSpeed: 1.00,
       orbRadius: 0.016,
+      orbTail: 1.00,
+      orbPreset: 'trichrome',
 
       // Calibrated 3-Point Studio Lighting & Atmosphere
       sunIntensity: 1.0,
@@ -162,6 +164,9 @@ export class HUD {
       this.setRangeValue('param-orb-intensity', 'val-orb-intensity', this.settings.orbIntensity);
       this.setRangeValue('param-orb-speed', 'val-orb-speed', this.settings.orbSpeed);
       this.setRangeValue('param-orb-radius', 'val-orb-radius', this.settings.orbRadius);
+      this.setRangeValue('param-orb-tail', 'val-orb-tail', this.settings.orbTail);
+      const presetSelect = document.getElementById('param-orb-preset') as HTMLSelectElement | null;
+      if (presetSelect) presetSelect.value = this.settings.orbPreset || 'trichrome';
 
       this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity);
       this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity);
@@ -291,9 +296,14 @@ export class HUD {
       this.updateOrbToggleUI(this.settings.orbEnabled);
       this.onSettingChange?.();
     });
+    document.getElementById('param-orb-preset')?.addEventListener('change', (e) => {
+      this.settings.orbPreset = (e.target as HTMLSelectElement).value;
+      this.onSettingChange?.();
+    });
     this.bindRange('param-orb-intensity', 'val-orb-intensity', val => this.settings.orbIntensity = val);
     this.bindRange('param-orb-speed', 'val-orb-speed', val => this.settings.orbSpeed = val);
     this.bindRange('param-orb-radius', 'val-orb-radius', val => this.settings.orbRadius = val);
+    this.bindRange('param-orb-tail', 'val-orb-tail', val => this.settings.orbTail = val);
 
     // Populate Material dropdown in Materials tab
     const matDropdown = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
@@ -1116,7 +1126,9 @@ export class HUD {
         orbEnabled: this.settings.orbEnabled,
         orbIntensity: this.settings.orbIntensity,
         orbSpeed: this.settings.orbSpeed,
-        orbRadius: this.settings.orbRadius
+        orbRadius: this.settings.orbRadius,
+        orbTail: this.settings.orbTail,
+        orbPreset: this.settings.orbPreset
       };
     } else if (tabId === 'tab-params') {
       return this.getDynamicParams();
@@ -1149,9 +1161,15 @@ export class HUD {
         this.settings.orbEnabled = values.orbEnabled;
         this.updateOrbToggleUI(this.settings.orbEnabled);
       }
+      if (values.orbPreset !== undefined) {
+        this.settings.orbPreset = values.orbPreset;
+        const presetEl = document.getElementById('param-orb-preset') as HTMLSelectElement | null;
+        if (presetEl) presetEl.value = values.orbPreset;
+      }
       if (values.orbIntensity !== undefined) this.setRangeValue('param-orb-intensity', 'val-orb-intensity', this.settings.orbIntensity = values.orbIntensity);
       if (values.orbSpeed !== undefined) this.setRangeValue('param-orb-speed', 'val-orb-speed', this.settings.orbSpeed = values.orbSpeed);
       if (values.orbRadius !== undefined) this.setRangeValue('param-orb-radius', 'val-orb-radius', this.settings.orbRadius = values.orbRadius);
+      if (values.orbTail !== undefined) this.setRangeValue('param-orb-tail', 'val-orb-tail', this.settings.orbTail = values.orbTail);
     } else if (tabId === 'tab-params') {
       // In Random Mode, keep user's live formula parameters intact during flythrough
       if (this.isRandomMode) return;
