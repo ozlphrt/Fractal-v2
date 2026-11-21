@@ -65,14 +65,12 @@ export interface RenderSettings {
   adaptiveSpeed: boolean;
   wallCushion: boolean;
 
-  // Audio Reactivity & Structural Mutation Matrix
+  // Audio Reactivity (Lights, Glow & Subtle Breathing)
   audioEnabled: boolean;
   audioSensitivity: number; // Master gain (0.2 - 3.0, default 1.4)
-  audioBreathing: number;   // Primary math scale expansion (0.0 - 2.0, default 0.9)
-  audioMutation: number;    // Multi-parameter topological morphing (0.0 - 2.5, default 1.2)
-  audioBeatPunch: number;   // Camera optical zoom recoil (0.0 - 2.0, default 0.70)
-  audioGlow: number;        // Volumetric aura & godrays flare (0.0 - 2.0, default 0.80)
-  audioColorShift: number;  // Palette phase flow & mineral flash (0.0 - 2.0, default 0.75)
+  audioBreathing: number;   // Subtle scale breathing (0.0 - 1.5, default 0.50)
+  audioGlow: number;        // Lights, specular & volumetric glow pulse (0.0 - 2.5, default 1.20)
+  audioColorShift: number;  // Palette phase flow & mineral flash (0.0 - 2.0, default 0.60)
 
   // Render State
   progressiveAccumulation: boolean;

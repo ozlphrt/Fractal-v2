@@ -275,13 +275,14 @@ export class Raymarcher {
     this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
       camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps, audioMetrics);
 
-    // Audio reactive exposure & bloom flare
+    // Audio reactive exposure & bloom flare (Lights & Glow dynamics)
     const audioActive = (settings.audioEnabled && audioMetrics?.active) ? 1.0 : 0.0;
     const beat = (audioMetrics?.beat ?? 0.0) * audioActive;
     const mid = (audioMetrics?.mid ?? 0.0) * audioActive;
     const bass = (audioMetrics?.bass ?? 0.0) * audioActive;
-    const exposureMod = 1.0 + beat * 0.28 * (settings.audioBeatPunch ?? 0.45) + bass * 0.12;
-    const bloomMod = 1.0 + (mid * 0.95 + beat * 0.70) * (settings.audioGlow ?? 0.55);
+    const glowScale = settings.audioGlow ?? 1.20;
+    const exposureMod = 1.0 + (beat * 0.18 + bass * 0.12) * glowScale;
+    const bloomMod = 1.0 + (mid * 0.95 + beat * 0.70) * glowScale;
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;
@@ -423,8 +424,8 @@ export class Raymarcher {
     const treble = (audioMetrics?.treble ?? 0.0) * audioActive * sens;
     const level = (audioMetrics?.level ?? 0.0) * audioActive * sens;
     const beat = (audioMetrics?.beat ?? 0.0) * audioActive * sens;
-    const glowMod = (settings.audioGlow ?? 0.80) * audioActive;
-    const colorShiftMod = (settings.audioColorShift ?? 0.75) * audioActive;
+    const glowMod = (settings.audioGlow ?? 1.20) * audioActive;
+    const colorShiftMod = (settings.audioColorShift ?? 0.60) * audioActive;
 
     set1f('u_audioBass', bass);
     set1f('u_audioMid', mid);
@@ -440,37 +441,21 @@ export class Raymarcher {
     set3f('u_palC', palette.c[0], palette.c[1], palette.c[2]);
     set3f('u_palD', palette.d[0], palette.d[1], palette.d[2]);
 
-    // Custom formula parameters (with serious multi-dimensional audio mutations)
-    const breathStrength = (settings.audioBreathing ?? 0.90) * audioActive;
-    const mutStrength = (settings.audioMutation ?? 1.20) * audioActive;
+    // Formula parameters: audio strictly controls a subtle, organic scale breathing on primary dimension.
+    // All other parameters remain 100% faithful to the formula and user sliders (zero shape distortion).
+    const breathStrength = (settings.audioBreathing ?? 0.50) * audioActive;
     let paramIndex = 0;
     for (const p of formula.params) {
       let val = formulaParams[p.id] ?? p.default;
       if (p.type === 'int') {
         set1i(p.uniform, Math.round(val));
       } else {
-        const span = Math.abs(p.max - p.min) || 1.0;
-        if (paramIndex === 0 && breathStrength > 0.01) {
-          // Primary shape dimension: powerful expansion on bass & kick drops (up to +25%)
-          const pulse = (bass * 0.85 + beat * 0.50) * 0.22 * breathStrength;
+        if (paramIndex === 0 && breathStrength > 0.001) {
+          // Subtle, organic scale breathing on bass & kick drops (~5-10% max expansion)
+          const pulse = (bass * 0.60 + beat * 0.35) * 0.08 * breathStrength;
           val = val * (1.0 + pulse);
-        } else if (mutStrength > 0.01) {
-          // Serious topological mutations across secondary shape parameters
-          if (paramIndex === 1) {
-            // Fold limit / minor radius / twist: counter-flexing contraction
-            const flex = (mid * 0.70 + beat * 0.40) * 0.20 * mutStrength;
-            val = val * (1.0 - flex);
-          } else if (paramIndex === 2) {
-            // Min radius / fluting / thickness: treble facet modulation
-            const shimmer = (treble * 0.80 + beat * 0.35) * 0.24 * mutStrength;
-            val = val * (1.0 + shimmer);
-          } else if (paramIndex >= 3) {
-            // Julia offsets / angles / harmonics: strictly driven by frequency balance (bass vs treble), zero autonomous time oscillations
-            const spectralShift = (bass - treble) * (span * 0.22) * mutStrength;
-            val = val + (paramIndex % 2 === 0 ? spectralShift : -spectralShift);
-          }
         }
-        val = Math.max(p.min * 0.8, Math.min(p.max * 1.2, val));
+        val = Math.max(p.min * 0.9, Math.min(p.max * 1.1, val));
         set1f(p.uniform, val);
         paramIndex++;
       }

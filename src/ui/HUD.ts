@@ -92,14 +92,12 @@ export class HUD {
       wallCushion: true,
       progressiveAccumulation: false,
 
-      // Audio Reactivity & Structural Mutation Matrix
+      // Audio Reactivity (Lights, Glow & Subtle Breathing)
       audioEnabled: false,
       audioSensitivity: 1.40,
-      audioBreathing: 0.90,
-      audioMutation: 1.20,
-      audioBeatPunch: 0.70,
-      audioGlow: 0.80,
-      audioColorShift: 0.75
+      audioBreathing: 0.50,
+      audioGlow: 1.20,
+      audioColorShift: 0.60
     };
 
     // Load any saved defaults from localStorage
@@ -296,26 +294,24 @@ export class HUD {
     this.bindRange('param-fog', 'val-fog', val => this.settings.fogDensity = val);
     this.bindRange('param-godrays', 'val-godrays', val => this.settings.godraysIntensity = val);
 
-    // Detailed Audio & Mutation Matrix Sliders
+    // Detailed Audio, Lighting & Subtle Breathing Sliders
     this.bindRange('param-audio-sens', 'val-audio-sens', val => this.settings.audioSensitivity = val);
     this.bindRange('param-audio-breath', 'val-audio-breath', val => this.settings.audioBreathing = val);
-    this.bindRange('param-audio-mutation', 'val-audio-mutation', val => this.settings.audioMutation = val);
-    this.bindRange('param-audio-punch', 'val-audio-punch', val => this.settings.audioBeatPunch = val);
     this.bindRange('param-audio-glow', 'val-audio-glow', val => this.settings.audioGlow = val);
     this.bindRange('param-audio-color', 'val-audio-color', val => this.settings.audioColorShift = val);
 
-    // One-Click Sound Presets
+    // One-Click Sound Presets (Lights & Glow Focused)
     document.getElementById('btn-sound-preset-radical')?.addEventListener('click', () => {
-      this.applySoundPreset({ audioBreathing: 1.4, audioMutation: 1.8, audioBeatPunch: 1.0, audioGlow: 1.1, audioColorShift: 1.2, audioSensitivity: 1.6 });
+      this.applySoundPreset({ audioBreathing: 0.6, audioGlow: 1.8, audioColorShift: 0.9, audioSensitivity: 1.6 });
     });
     document.getElementById('btn-sound-preset-flow')?.addEventListener('click', () => {
-      this.applySoundPreset({ audioBreathing: 0.8, audioMutation: 1.0, audioBeatPunch: 0.5, audioGlow: 0.8, audioColorShift: 1.4, audioSensitivity: 1.4 });
+      this.applySoundPreset({ audioBreathing: 0.4, audioGlow: 1.4, audioColorShift: 0.6, audioSensitivity: 1.4 });
     });
     document.getElementById('btn-sound-preset-cathedral')?.addEventListener('click', () => {
-      this.applySoundPreset({ audioBreathing: 0.9, audioMutation: 0.7, audioBeatPunch: 0.8, audioGlow: 1.5, audioColorShift: 0.6, audioSensitivity: 1.5 });
+      this.applySoundPreset({ audioBreathing: 0.3, audioGlow: 2.2, audioColorShift: 0.4, audioSensitivity: 1.5 });
     });
     document.getElementById('btn-sound-preset-subtle')?.addEventListener('click', () => {
-      this.applySoundPreset({ audioBreathing: 0.4, audioMutation: 0.3, audioBeatPunch: 0.3, audioGlow: 0.4, audioColorShift: 0.3, audioSensitivity: 1.1 });
+      this.applySoundPreset({ audioBreathing: 0.2, audioGlow: 0.7, audioColorShift: 0.3, audioSensitivity: 1.1 });
     });
 
     // Audio Reactivity Header Toggle & File Picker
@@ -1929,22 +1925,16 @@ export class HUD {
 
   public applySoundPreset(p: {
     audioBreathing: number;
-    audioMutation: number;
-    audioBeatPunch: number;
     audioGlow: number;
     audioColorShift: number;
     audioSensitivity: number;
   }) {
     this.settings.audioBreathing = p.audioBreathing;
-    this.settings.audioMutation = p.audioMutation;
-    this.settings.audioBeatPunch = p.audioBeatPunch;
     this.settings.audioGlow = p.audioGlow;
     this.settings.audioColorShift = p.audioColorShift;
     this.settings.audioSensitivity = p.audioSensitivity;
 
     this.setRangeValue('param-audio-breath', 'val-audio-breath', p.audioBreathing);
-    this.setRangeValue('param-audio-mutation', 'val-audio-mutation', p.audioMutation);
-    this.setRangeValue('param-audio-punch', 'val-audio-punch', p.audioBeatPunch);
     this.setRangeValue('param-audio-glow', 'val-audio-glow', p.audioGlow);
     this.setRangeValue('param-audio-color', 'val-audio-color', p.audioColorShift);
     this.setRangeValue('param-audio-sens', 'val-audio-sens', p.audioSensitivity);

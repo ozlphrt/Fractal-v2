@@ -448,10 +448,10 @@
               <div class="control-row" style="margin-top: 10px;">
                 <label>Quick Presets</label>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; grid-column: span 2;">
-                  <button class="studio-btn-action" id="btn-sound-preset-radical" title="Deep topological mutation & bass warp" style="padding: 5px;">🔥 Radical Morph</button>
-                  <button class="studio-btn-action" id="btn-sound-preset-flow" title="Acoustic harmonic twist and color flow" style="padding: 5px;">🌊 Harmonic Flow</button>
-                  <button class="studio-btn-action" id="btn-sound-preset-cathedral" title="Dramatic godrays & bloom flare" style="padding: 5px;">✨ Cathedral Pulse</button>
-                  <button class="studio-btn-action" id="btn-sound-preset-subtle" title="Gentle organic breathing" style="padding: 5px;">🍃 Subtle Rest</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-radical" title="Deep volumetric aura & radiant glow" style="padding: 5px;">✨ Luminous Aura</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-flow" title="Dynamic lights & specular shimmer" style="padding: 5px;">🌟 Dynamic Lights</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-cathedral" title="Dramatic solar flare & godrays" style="padding: 5px;">☀️ Solar Flare</button>
+                  <button class="studio-btn-action" id="btn-sound-preset-subtle" title="Gentle ambient glow & micro-breathing" style="padding: 5px;">🍃 Subtle Whisper</button>
                 </div>
               </div>
             </div>
@@ -503,46 +503,30 @@
               </div>
             </div>
 
-            <!-- Structural Mutation & Warping -->
+            <!-- Lighting & Volumetric Glow -->
             <div class="control-section">
-              <span class="section-tag">TOPOLOGICAL MUTATION</span>
-              <h3>Geometric Deformation & Dynamics</h3>
+              <span class="section-tag">LIGHTING & GLOW</span>
+              <h3>Luminance, Specular & Volumetrics</h3>
               <div class="control-row">
-                <label>Shape Mutation</label>
-                <input type="range" id="param-audio-mutation" min="0.0" max="2.5" step="0.05" value="1.20">
-                <span class="val-display" id="val-audio-mutation">1.20</span>
+                <label>Lights & Glow Surge</label>
+                <input type="range" id="param-audio-glow" min="0.0" max="2.5" step="0.05" value="1.20">
+                <span class="val-display" id="val-audio-glow">1.20</span>
               </div>
+              <div class="control-row">
+                <label>Mineral Color Flow</label>
+                <input type="range" id="param-audio-color" min="0.0" max="2.0" step="0.05" value="0.60">
+                <span class="val-display" id="val-audio-color">0.60</span>
+              </div>
+            </div>
+
+            <!-- Subtle Geometry & Gain -->
+            <div class="control-section">
+              <span class="section-tag">GEOMETRY & GAIN</span>
+              <h3>Subtle Breathing & Input Gain</h3>
               <div class="control-row">
                 <label>Scale Breathing</label>
-                <input type="range" id="param-audio-breath" min="0.0" max="2.0" step="0.05" value="0.90">
-                <span class="val-display" id="val-audio-breath">0.90</span>
-              </div>
-            </div>
-
-            <!-- Atmosphere, Lighting & Color -->
-            <div class="control-section">
-              <span class="section-tag">ATMOSPHERE & COLOR</span>
-              <h3>Volumetrics & Mineral Flashing</h3>
-              <div class="control-row">
-                <label>Godrays & Glow Pulse</label>
-                <input type="range" id="param-audio-glow" min="0.0" max="2.0" step="0.05" value="0.80">
-                <span class="val-display" id="val-audio-glow">0.80</span>
-              </div>
-              <div class="control-row">
-                <label>Palette Mineral Flow</label>
-                <input type="range" id="param-audio-color" min="0.0" max="2.0" step="0.05" value="0.75">
-                <span class="val-display" id="val-audio-color">0.75</span>
-              </div>
-            </div>
-
-            <!-- Dynamics & Camera -->
-            <div class="control-section">
-              <span class="section-tag">CAMERA DYNAMICS</span>
-              <h3>Subwoofer Punch & Gain</h3>
-              <div class="control-row">
-                <label>Beat Camera Punch</label>
-                <input type="range" id="param-audio-punch" min="0.0" max="2.0" step="0.05" value="0.70">
-                <span class="val-display" id="val-audio-punch">0.70</span>
+                <input type="range" id="param-audio-breath" min="0.0" max="1.5" step="0.05" value="0.50">
+                <span class="val-display" id="val-audio-breath">0.50</span>
               </div>
               <div class="control-row">
                 <label>Master Sensitivity</label>

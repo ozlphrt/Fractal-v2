@@ -140,8 +140,8 @@ void main() {
     vec3 cu = normalize(cross(cw, u_camUp));
     vec3 cv = cross(cu, cw);
 
-    // Focal plane & Thin-lens Depth of Field (DoF) with optical beat breathing
-    float camFocalScale = 1.8 + (u_audioBeat * 0.32 + u_audioBass * 0.14) * max(0.5, u_audioGlowMod);
+    // Focal plane & Thin-lens Depth of Field (DoF) - steady optical scale
+    float camFocalScale = 1.8;
     vec3 primaryDir = normalize(p.x * cu + p.y * cv + camFocalScale * cw);
     vec3 focalPoint = u_camPos + primaryDir * u_focalDistance;
 
@@ -170,7 +170,7 @@ void main() {
         // Calibrated volumetric step glow with organic audio breathing
         if (u_glowIntensity > 0.001 && d < 0.35) {
             float g = max(0.0, 1.0 - d * 2.8);
-            float audioGlow = 1.0 + (u_audioMid * 1.6 + u_audioBeat * 1.4) * u_audioGlowMod;
+            float audioGlow = 1.0 + (u_audioMid * 1.8 + u_audioBass * 1.4 + u_audioBeat * 2.0) * u_audioGlowMod;
             glow += g * g * 0.012 * u_glowIntensity * audioGlow;
         }
 
@@ -178,7 +178,7 @@ void main() {
         if (u_godraysIntensity > 0.01) {
             float lightAlign = dot(rayDir, u_lightDir);
             float phase = henyeyGreenstein(lightAlign, 0.65);
-            float audioRays = 1.0 + (u_audioBass * 1.8 + u_audioBeat * 1.2) * u_audioGlowMod;
+            float audioRays = 1.0 + (u_audioBass * 2.2 + u_audioBeat * 1.6) * u_audioGlowMod;
             godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.0006 * u_godraysIntensity * audioRays;
         }
 
@@ -221,16 +221,16 @@ void main() {
 
         // 1. Primary Sun Light with bass breathing
         vec3 sunColor = vec3(1.0, 0.94, 0.85);
-        float sunAudio = 1.0 + (u_audioBass * 0.45 + u_audioBeat * 0.35) * u_audioGlowMod;
+        float sunAudio = 1.0 + (u_audioBass * 0.70 + u_audioBeat * 0.55) * u_audioGlowMod;
         vec3 directLight = diff * shadow * sunColor * 0.95 * u_sunIntensity * sunAudio;
         // Treble glint shimmer on fine rock facets
-        float specTreble = 0.22 + (u_audioTreble * 0.85 + u_audioBeat * 0.45) * u_audioGlowMod;
+        float specTreble = 0.22 + (u_audioTreble * 1.35 + u_audioBeat * 0.65) * u_audioGlowMod;
         vec3 specularLight = spec * shadow * sunColor * specTreble * u_sunIntensity;
 
         // 2. Secondary Fill / Bounce Light (soft cool ambient bounce so shadows reveal geological detail)
         vec3 fillDir = normalize(vec3(-u_lightDir.z, -0.3, u_lightDir.x));
         float fillDiff = clamp(dot(nor, fillDir), 0.0, 1.0);
-        float fillAudio = 1.0 + u_audioMid * 0.35 * u_audioGlowMod;
+        float fillAudio = 1.0 + (u_audioMid * 0.45 + u_audioLevel * 0.35) * u_audioGlowMod;
         vec3 fillLight = fillDiff * u_fillIntensity * vec3(0.55, 0.62, 0.72) * 0.75 * fillAudio;
 
         // 3. Subtle Cool Dark Midnight Blue Rim / Backlight (Cinematic edge separation)
@@ -239,7 +239,7 @@ void main() {
         vec3 rimDir = normalize(vec3(-u_lightDir.x, sin(rimRad), -u_lightDir.z));
         float rimDiff = clamp(dot(nor, rimDir), 0.0, 1.0);
         float rimFresnel = pow(clamp(1.0 + dot(nor, rayDir), 0.0, 1.0), 4.2);
-        float rimAudio = 1.0 + (u_audioMid * 0.95 + u_audioBeat * 0.75) * u_audioGlowMod;
+        float rimAudio = 1.0 + (u_audioMid * 1.40 + u_audioBeat * 1.10) * u_audioGlowMod;
         vec3 rimLight = (rimDiff * 0.25 + rimFresnel * 0.75) * u_rimIntensity * coolDarkBlue * rimAudio;
 
         // 4. Camera-Tracking Flashlight / Headlamp (6DOF Flight Mode ONLY)
@@ -262,10 +262,11 @@ void main() {
         // Assemble total surface illumination
         sceneColor = (directLight + fillLight + ambientLight + headlampLight) * albedo + specularLight + rimLight;
 
-        // Subtle optional emissive veins
+        // Subtle optional emissive veins with bass pulse
         if (u_emissiveVeins > 0.01) {
             float vein = pow(clamp(1.0 - finalTrap.y * 3.0, 0.0, 1.0), 4.0);
-            sceneColor += albedo * vein * u_emissiveVeins * 0.3;
+            float veinAudio = 1.0 + (u_audioBass * 1.2 + u_audioBeat * 1.0) * u_audioGlowMod;
+            sceneColor += albedo * vein * u_emissiveVeins * 0.3 * veinAudio;
         }
 
         // Distance fog smoothly dissolving into deep space background (evaluated only near horizon for massive FPS gain)
