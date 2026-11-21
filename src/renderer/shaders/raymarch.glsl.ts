@@ -174,13 +174,11 @@ void main() {
         vec3 currPos = rayOrigin + rayDir * t;
         float d = mapFractal(currPos, trap);
 
-        // Calibrated volumetric step glow with self-lit core color bleeding
+        // Calibrated volumetric step glow with organic audio breathing
         if (u_glowIntensity > 0.001 && d < 0.35) {
             float g = max(0.0, 1.0 - d * 2.8);
             float audioGlow = 1.0 + (u_audioMid * 1.8 + u_audioBass * 1.4 + u_audioBeat * 2.0) * u_audioGlowMod;
-            float stepCoreMask = (u_coreGlow > 0.01) ? smoothstep(u_coreThreshold * 1.4, u_coreThreshold * 0.25, min(trap.w, trap.y)) : 0.0;
-            vec3 stepTint = mix(baseGlowTint, u_coreColor, stepCoreMask * 0.80);
-            glowAccum += stepTint * (g * g * 0.012 * u_glowIntensity * audioGlow);
+            glowAccum += baseGlowTint * (g * g * 0.012 * u_glowIntensity * audioGlow);
         }
 
         // Soft atmospheric god rays with bass modulation
@@ -226,11 +224,13 @@ void main() {
         bedrockAlbedo = mix(bedrockAlbedo * 0.65, bedrockAlbedo, smoothstep(0.1, 0.9, ao));
 
         // Multi-Material Core Discrimination:
-        // Distinguishes massive macro bedrock from recursive micro-cores & nested sub-nodes
-        float coreMetric = min(finalTrap.w, finalTrap.y);
-        float coreMask = (u_coreGlow > 0.001) 
-            ? smoothstep(u_coreThreshold, u_coreThreshold * 0.25, coreMetric) 
-            : 0.0;
+        // Scarce, pinpoint luminescent nodes & jewel embers
+        float coreMetric = finalTrap.x;
+        vec3 pNode = sin(hitPos * 28.0);
+        float lattice = clamp(pNode.x * pNode.y * pNode.z * 1.8, 0.0, 1.0);
+        float rarityThresh = clamp(u_coreThreshold * 0.18, 0.006, 0.07);
+        float trapMask = smoothstep(rarityThresh, rarityThresh * 0.2, coreMetric);
+        float coreMask = (u_coreGlow > 0.01) ? pow(trapMask * lattice, 4.0) : 0.0;
 
         // Core Albedo (polished contrasting mineral / metallic hue)
         vec3 coreAlbedo = mix(bedrockAlbedo * 0.35, u_coreColor, 0.85);
@@ -284,12 +284,11 @@ void main() {
         // Assemble illuminated surface with dual-material properties
         sceneColor = (directLight + fillLight + ambientLight + headlampLight) * surfaceAlbedo + specularLight + rimLight;
 
-        // Self-Lit Core Luminescence & Audio Energy Pulsing
+        // Self-Lit Core Luminescence & Audio Energy Pulsing (Scarce Glowing Jewels)
         if (u_coreGlow > 0.01 && coreMask > 0.001) {
-            float coreAudio = 1.0 + (u_audioBass * 1.6 + u_audioBeat * 2.0) * u_audioGlowMod;
+            float coreAudio = 1.0 + (u_audioBass * 1.4 + u_audioBeat * 1.8) * u_audioGlowMod;
             vec3 coreEmissive = u_coreColor * u_coreGlow * coreAudio;
-            // Hot inner incandescent radiance with smooth falloff
-            sceneColor += coreEmissive * (coreMask * coreMask * 1.65);
+            sceneColor += coreEmissive * (coreMask * 2.2);
         }
 
         // Subtle optional emissive veins with bass pulse

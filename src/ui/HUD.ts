@@ -74,8 +74,8 @@ export class HUD {
       exposure: 1.0,
 
       // Multi-Material Core & Self-Lit Glowing Elements
-      coreGlow: 1.40,
-      coreThreshold: 0.22,
+      coreGlow: 1.00,
+      coreThreshold: 0.15,
       coreTheme: 'amber',
       corePolish: 0.85,
 
