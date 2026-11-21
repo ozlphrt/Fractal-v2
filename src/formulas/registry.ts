@@ -1,5 +1,5 @@
 // src/formulas/registry.ts
-// Catalog of all 26 fractal formulas grouped into 12 mathematical families with numbering
+// Catalog of all 25 fractal formulas grouped into 10 mathematical families with numbering
 // 100% natural, geological, mineral, and organic materials (rocks, sands, soils, moss, clays, slates)
 
 import { FormulaDefinition, PalettePreset } from '../core/types.ts';
@@ -120,26 +120,16 @@ export const FORMULA_GROUPS: FormulaGroup[] = [
     ids: ['schoen_gyroid', 'schwarz_p']
   },
   {
-    name: 'Hyperbolic & Coxeter Honeycombs',
-    badge: 'COX',
-    ids: ['klein_torus']
-  },
-  {
     name: 'Clifford & Hopf Fibrations',
     badge: 'HOPF',
-    ids: ['hopf_rings']
-  },
-  {
-    name: 'Biomorphs & Nautilus Shells',
-    badge: 'BIO',
-    ids: ['coral_nautilus']
+    ids: ['hopf_rings', 'helix_torus']
   }
 ];
 
 // Ordered list of formula IDs grouped logically
 export const FORMULA_CYCLE_ORDER: string[] = FORMULA_GROUPS.flatMap(g => g.ids);
 
-// Build typed definitions for all 26 formulas
+// Build typed definitions for all 25 formulas
 export const FORMULAS: Record<string, FormulaDefinition> = {};
 
 for (const id of FORMULA_CYCLE_ORDER) {

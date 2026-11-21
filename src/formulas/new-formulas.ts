@@ -1,10 +1,8 @@
 // src/formulas/new-formulas.ts
-// Mathematical definitions for 15 new fractal formulas across 5 advanced mathematical families:
+// Mathematical definitions for new fractal formulas across advanced mathematical families:
 // 1. Mandelbox & Tglad Folds (MBOX)
 // 2. Triply Periodic Minimal Surfaces (TPMS)
-// 3. Hyperbolic Honeycombs & Coxeter Tessellations (COX)
-// 4. Clifford Torus & Hopf Fibrations (HOPF)
-// 5. Organic Biomorphs & Bicomplex Dendrites (BIO)
+// 3. Clifford Torus, Hopf Fibrations & Helical Manifolds (HOPF)
 
 export const NEW_FORMULA_IDS = {
   // Group 1: Mandelbox & Tglad Folds
@@ -14,14 +12,9 @@ export const NEW_FORMULA_IDS = {
   SCHOEN_GYROID: 'schoen_gyroid',
   SCHWARZ_P: 'schwarz_p',
 
-  // Group 3: Hyperbolic & Coxeter Honeycombs
-  KLEIN_TORUS: 'klein_torus',
-
-  // Group 4: Clifford Torus & Hopf Fibrations
+  // Group 3: Clifford Torus & Hopf Fibrations
   HOPF_RINGS: 'hopf_rings',
-
-  // Group 5: Biological Shells & Growth
-  CORAL_NAUTILUS: 'coral_nautilus'
+  HELIX_TORUS: 'helix_torus'
 } as const;
 
 export const NEW_FORMULAS: Record<string, any> = {
@@ -130,10 +123,10 @@ float mapFractal(vec3 pos, out vec4 trap) {
     name: 'Schoen Gyroid',
     subtitle: 'Infinite Porous Channel Labyrinth',
     defaultCam: {
-      pos: [0.0, 0.0, 2.8],
+      pos: [0.0, 2.2, 5.6],
       target: [0.0, 0.0, 0.0]
     },
-    boundRadius: 5.5,
+    boundRadius: 7.0,
     params: [
       { id: 'gy_scale', name: 'Channel Frequency', min: 1.5, max: 4.8, step: 0.05, default: 2.75, uniform: 'u_gy_scale', type: 'float' },
       { id: 'gy_thickness', name: 'Wall Thickness', min: 0.04, max: 0.35, step: 0.01, default: 0.12, uniform: 'u_gy_thickness', type: 'float' },
@@ -167,8 +160,8 @@ float mapFractal(vec3 pos, out vec4 trap) {
         sc *= 1.85;
         amp *= 0.55;
     }
-    // Smooth bounding cylinder to contain in studio airspace
-    float bound = length(pos) - 2.8;
+    // Bounding volume containing the periodic sponge in studio airspace
+    float bound = length(pos) - 4.6;
     trap = orbit;
     return max(d, bound);
 }
@@ -177,7 +170,7 @@ float mapFractal(vec3 pos, out vec4 trap) {
       const sc = values.gy_scale ?? 2.75;
       const th = values.gy_thickness ?? 0.12;
       const g = Math.sin(pos[0] * sc) * Math.cos(pos[1] * sc) + Math.sin(pos[1] * sc) * Math.cos(pos[2] * sc) + Math.sin(pos[2] * sc) * Math.cos(pos[0] * sc);
-      return Math.max((Math.abs(g) - th) / (1.8 * sc), Math.hypot(...pos) - 2.8);
+      return Math.max((Math.abs(g) - th) / (1.8 * sc), Math.hypot(...pos) - 4.6);
     }
   },
 
@@ -186,10 +179,10 @@ float mapFractal(vec3 pos, out vec4 trap) {
     name: 'Schwarz P-Surface',
     subtitle: 'Subterranean Cubic Vault Network',
     defaultCam: {
-      pos: [0.0, 0.0, 2.6],
+      pos: [0.0, 2.2, 5.4],
       target: [0.0, 0.0, 0.0]
     },
-    boundRadius: 5.0,
+    boundRadius: 7.0,
     params: [
       { id: 'sp_freq', name: 'Cell Frequency', min: 1.0, max: 4.2, step: 0.05, default: 2.15, uniform: 'u_sp_freq', type: 'float' },
       { id: 'sp_isoval', name: 'Isovalue Arch', min: 0.05, max: 0.75, step: 0.02, default: 0.28, uniform: 'u_sp_isoval', type: 'float' },
@@ -221,78 +214,18 @@ float mapFractal(vec3 pos, out vec4 trap) {
         sc *= 1.75;
     }
     trap = orbit;
-    return max(d, length(pos) - 2.65);
+    return max(d, length(pos) - 4.5);
 }
 `,
     cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
       const sc = values.sp_freq ?? 2.15;
       const s = Math.cos(pos[0] * sc) + Math.cos(pos[1] * sc) + Math.cos(pos[2] * sc);
-      return Math.max((Math.abs(s) - (values.sp_isoval ?? 0.28)) / (1.7 * sc), Math.hypot(...pos) - 2.65);
+      return Math.max((Math.abs(s) - (values.sp_isoval ?? 0.28)) / (1.7 * sc), Math.hypot(...pos) - 4.5);
     }
   },
 
   // =========================================================================
-  // GROUP 3: HYPERBOLIC & COXETER HONEYCOMBS (COX)
-  // =========================================================================
-
-  [NEW_FORMULA_IDS.KLEIN_TORUS]: {
-    id: NEW_FORMULA_IDS.KLEIN_TORUS,
-    name: 'Klein Bottle Torus',
-    subtitle: 'Non-Orientable 4D Twisted Tube',
-    defaultCam: {
-      pos: [0.0, 0.2, 2.7],
-      target: [0.0, 0.0, 0.0]
-    },
-    boundRadius: 5.0,
-    params: [
-      { id: 'kt_radius', name: 'Bottle Radius', min: 1.0, max: 2.6, step: 0.02, default: 1.75, uniform: 'u_kt_radius', type: 'float' },
-      { id: 'kt_tube', name: 'Tube Thickness', min: 0.15, max: 0.8, step: 0.02, default: 0.42, uniform: 'u_kt_tube', type: 'float' },
-      { id: 'kt_twist', name: 'Möbius Twist', min: 1.0, max: 4.0, step: 0.1, default: 2.0, uniform: 'u_kt_twist', type: 'float' },
-      { id: 'kt_iterations', name: 'Fractal Folds', min: 4, max: 12, step: 1, default: 8, uniform: 'u_kt_iterations', type: 'int' }
-    ],
-    presets: [
-      { name: 'Self-Intersecting Möbius Manifold', values: { kt_radius: 1.75, kt_tube: 0.42, kt_twist: 2.0, kt_iterations: 8 } },
-      { name: 'Intertwined 4D Figure-8 Knot', values: { kt_radius: 2.2, kt_tube: 0.32, kt_twist: 3.0, kt_iterations: 9 } }
-    ],
-    glsl: `
-float mapFractal(vec3 pos, out vec4 trap) {
-    vec3 p = pos;
-    float r = u_kt_radius;
-    float tube = u_kt_tube;
-    float dr = 1.0;
-    vec4 orbit = vec4(100.0);
-
-    for (int i = 0; i < 12; i++) {
-        if (i >= u_kt_iterations) break;
-        // Non-orientable Möbius tube coordinates
-        float u = atan(p.y, p.x);
-        float v = p.z;
-        float halfU = u * 0.5 * u_kt_twist;
-        vec2 q = vec2(length(p.xy) - r, p.z);
-        // Rotation by half-angle twist
-        vec2 rotatedQ = vec2(q.x * cos(halfU) - q.y * sin(halfU), q.x * sin(halfU) + q.y * cos(halfU));
-        p.xy = rotatedQ;
-        p.z = sin(u * 2.0) * 0.5;
-        // Recursive inversion
-        float d2 = dot(p, p);
-        orbit = min(orbit, vec4(abs(p), sqrt(d2)));
-        p = abs(p) / max(0.2, d2) - vec3(0.35, 0.45, 0.25);
-        dr *= 1.45;
-    }
-    trap = orbit;
-    return (length(p.xy) - tube) / dr;
-}
-`,
-    cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const r = values.kt_radius ?? 1.75;
-      const tube = values.kt_tube ?? 0.42;
-      const q = Math.hypot(pos[0], pos[1]) - r;
-      return Math.hypot(q, pos[2]) - tube;
-    }
-  },
-
-  // =========================================================================
-  // GROUP 4: CLIFFORD TORUS & HOPF FIBRATIONS (HOPF)
+  // GROUP 3: CLIFFORD TORUS & HOPF FIBRATIONS (HOPF)
   // =========================================================================
 
   [NEW_FORMULA_IDS.HOPF_RINGS]: {
@@ -355,59 +288,86 @@ float mapFractal(vec3 pos, out vec4 trap) {
     }
   },
 
-  // =========================================================================
-  // GROUP 5: BIOLOGICAL SHELLS & GROWTH (BIO)
-  // =========================================================================
-
-  [NEW_FORMULA_IDS.CORAL_NAUTILUS]: {
-    id: NEW_FORMULA_IDS.CORAL_NAUTILUS,
-    name: 'Coral Nautilus',
-    subtitle: 'Logarithmic Spiral Fluted Shell',
+  [NEW_FORMULA_IDS.HELIX_TORUS]: {
+    id: NEW_FORMULA_IDS.HELIX_TORUS,
+    name: 'Helix Torus',
+    subtitle: 'Braided Coiled Toroidal Manifold',
     defaultCam: {
-      pos: [0.0, 0.4, 2.7],
+      pos: [0.0, 1.8, 4.2],
       target: [0.0, 0.0, 0.0]
     },
-    boundRadius: 5.0,
+    boundRadius: 5.5,
     params: [
-      { id: 'cn_pitch', name: 'Spiral Pitch', min: 0.1, max: 0.6, step: 0.01, default: 0.28, uniform: 'u_cn_pitch', type: 'float' },
-      { id: 'cn_flutes', name: 'Flute Chambers', min: 3, max: 12, step: 1, default: 6, uniform: 'u_cn_flutes', type: 'int' },
-      { id: 'cn_curl', name: 'Logarithmic Curl', min: 0.5, max: 2.5, step: 0.05, default: 1.35, uniform: 'u_cn_curl', type: 'float' },
-      { id: 'cn_iterations', name: 'Iterations', min: 5, max: 14, step: 1, default: 8, uniform: 'u_cn_iterations', type: 'int' }
+      { id: 'ht_major_r', name: 'Major Torus Radius', min: 1.0, max: 3.0, step: 0.02, default: 1.85, uniform: 'u_ht_major_r', type: 'float' },
+      { id: 'ht_minor_r', name: 'Coil Radius', min: 0.2, max: 1.2, step: 0.02, default: 0.60, uniform: 'u_ht_minor_r', type: 'float' },
+      { id: 'ht_tube_r', name: 'Strand Thickness', min: 0.05, max: 0.35, step: 0.01, default: 0.18, uniform: 'u_ht_tube_r', type: 'float' },
+      { id: 'ht_coils', name: 'Helical Coils', min: 1.0, max: 16.0, step: 0.5, default: 5.0, uniform: 'u_ht_coils', type: 'float' },
+      { id: 'ht_strands', name: 'Braided Strands', min: 1, max: 6, step: 1, default: 3, uniform: 'u_ht_strands', type: 'int' },
+      { id: 'ht_twist', name: 'Fluting Texture', min: 0.0, max: 1.0, step: 0.02, default: 0.35, uniform: 'u_ht_twist', type: 'float' }
     ],
     presets: [
-      { name: 'Fluted Ammonite Shell', values: { cn_pitch: 0.28, cn_flutes: 6, cn_curl: 1.35, cn_iterations: 8 } },
-      { name: 'Deep Sea Nautilus Spiral', values: { cn_pitch: 0.38, cn_flutes: 8, cn_curl: 1.85, cn_iterations: 10 } }
+      { name: 'Triple-Braided Celtic Torus', values: { ht_major_r: 1.85, ht_minor_r: 0.60, ht_tube_r: 0.18, ht_coils: 5.0, ht_strands: 3, ht_twist: 0.35 } },
+      { name: 'Double-Helix Plasma Ring', values: { ht_major_r: 2.10, ht_minor_r: 0.70, ht_tube_r: 0.15, ht_coils: 8.0, ht_strands: 2, ht_twist: 0.50 } },
+      { name: 'Monolithic Corkscrew Vault', values: { ht_major_r: 1.70, ht_minor_r: 0.50, ht_tube_r: 0.24, ht_coils: 3.0, ht_strands: 1, ht_twist: 0.15 } },
+      { name: 'Quintuple Fiber Bundle', values: { ht_major_r: 2.00, ht_minor_r: 0.75, ht_tube_r: 0.12, ht_coils: 6.0, ht_strands: 5, ht_twist: 0.40 } }
     ],
     glsl: `
 float mapFractal(vec3 pos, out vec4 trap) {
     vec3 p = pos;
+    float R = u_ht_major_r;
+    float rHelix = u_ht_minor_r;
+    float rTube = u_ht_tube_r;
+    float coils = u_ht_coils;
+    int strands = u_ht_strands;
+
+    float theta = atan(p.y, p.x);
+    float qx = length(p.xy) - R;
+    vec2 q = vec2(qx, p.z);
+
     float d = 1e5;
     vec4 orbit = vec4(100.0);
-    float k = float(u_cn_flutes);
 
-    for (int i = 0; i < 14; i++) {
-        if (i >= u_cn_iterations) break;
-        float r = length(p.xy);
-        float theta = atan(p.y, p.x);
-        // Logarithmic spiral fold: angle modulates with log radius
-        float spiralAngle = mod(theta + u_cn_curl * log(max(0.01, r)), 6.2831853 / k) - 3.14159265 / k;
-        p.xy = vec2(cos(spiralAngle), sin(spiralAngle)) * r;
-        p.z -= u_cn_pitch * r;
-        // Chamber shell cross section
-        float chamberD = length(vec2(r - 0.95, p.z)) - 0.22;
-        d = min(d, chamberD);
-        orbit = min(orbit, vec4(abs(p), chamberD));
-        // Recursive scale
-        p = p * 1.55 - vec3(0.35, 0.0, 0.2);
+    for (int i = 0; i < 6; i++) {
+        if (i >= strands) break;
+        float phase = float(i) * 6.2831853 / float(strands);
+        float gamma = theta * coils + phase;
+        vec2 strandCenter = vec2(cos(gamma), sin(gamma)) * rHelix;
+        vec2 delta = q - strandCenter;
+        float strandDist = length(delta) - rTube;
+        
+        // Harmonic surface fluting for rich specular highlights
+        float fluting = u_ht_twist * 0.03 * cos(atan(delta.y, delta.x) * 4.0 + theta * 2.0);
+        strandDist -= fluting;
+        
+        d = min(d, strandDist);
+        orbit = min(orbit, vec4(abs(delta), strandDist, float(i) / float(strands)));
     }
+
     trap = orbit;
-    return d;
+    return d * 0.85;
 }
 `,
     cpuEvalDE(pos: [number, number, number], values: Record<string, number>) {
-      const r = Math.hypot(pos[0], pos[1]);
-      const pitch = values.cn_pitch ?? 0.28;
-      return Math.hypot(r - 0.95, pos[2] + pitch * 0.2) - 0.22;
+      const R = values.ht_major_r ?? 1.85;
+      const rHelix = values.ht_minor_r ?? 0.60;
+      const rTube = values.ht_tube_r ?? 0.18;
+      const coils = values.ht_coils ?? 5.0;
+      const strands = Math.min(6, Math.max(1, Math.round(values.ht_strands ?? 3)));
+
+      const theta = Math.atan2(pos[1], pos[0]);
+      const qx = Math.hypot(pos[0], pos[1]) - R;
+      const qy = pos[2];
+
+      let minDist = 1e5;
+      for (let i = 0; i < strands; i++) {
+        const phase = (i * 2 * Math.PI) / strands;
+        const gamma = theta * coils + phase;
+        const cx = Math.cos(gamma) * rHelix;
+        const cy = Math.sin(gamma) * rHelix;
+        const dist = Math.hypot(qx - cx, qy - cy) - rTube;
+        if (dist < minDist) minDist = dist;
+      }
+      return minDist * 0.85;
     }
   }
 };
