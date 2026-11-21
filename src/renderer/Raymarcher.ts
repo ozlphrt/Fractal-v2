@@ -275,14 +275,12 @@ export class Raymarcher {
     this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
       camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps, audioMetrics);
 
-    // Audio reactive exposure & bloom flare (Lights & Glow dynamics)
+    // Audio reactive subtle highlight flare (no global exposure blowing out contrast)
     const audioActive = (settings.audioEnabled && audioMetrics?.active) ? 1.0 : 0.0;
     const beat = (audioMetrics?.beat ?? 0.0) * audioActive;
     const mid = (audioMetrics?.mid ?? 0.0) * audioActive;
-    const bass = (audioMetrics?.bass ?? 0.0) * audioActive;
     const glowScale = settings.audioGlow ?? 1.20;
-    const exposureMod = 1.0 + (beat * 0.18 + bass * 0.12) * glowScale;
-    const bloomMod = 1.0 + (mid * 0.95 + beat * 0.70) * glowScale;
+    const bloomMod = 1.0 + (mid * 0.16 + beat * 0.12) * (glowScale * 0.4);
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;
@@ -295,7 +293,7 @@ export class Raymarcher {
     // Post-Processing Pass (Bloom, ACES tonemap, Chromatic aberration, Screen output, Smooth Formula Dissolve)
     this.postProcessor.render(
       finalAccumTexture,
-      settings.exposure * exposureMod,
+      settings.exposure,
       settings.bloomIntensity * bloomMod,
       settings.progressiveAccumulation ? 0.35 : 0.65,
       settings.focalDistance,
@@ -437,23 +435,13 @@ export class Raymarcher {
     set3f('u_palC', palette.c[0], palette.c[1], palette.c[2]);
     set3f('u_palD', palette.d[0], palette.d[1], palette.d[2]);
 
-    // Formula parameters: audio strictly controls a subtle, organic scale breathing on primary dimension.
-    // All other parameters remain 100% faithful to the formula and user sliders (zero shape distortion).
-    const breathStrength = (settings.audioBreathing ?? 0.50) * audioActive;
-    let paramIndex = 0;
+    // Formula parameters: exactly faithful to formula and user/keyframe sliders (zero geometric distortion / ghost twin)
     for (const p of formula.params) {
-      let val = formulaParams[p.id] ?? p.default;
+      const val = formulaParams[p.id] ?? p.default;
       if (p.type === 'int') {
         set1i(p.uniform, Math.round(val));
       } else {
-        if (paramIndex === 0 && breathStrength > 0.001) {
-          // Subtle, organic scale breathing on bass & kick drops (~5-10% max expansion)
-          const pulse = (bass * 0.60 + beat * 0.35) * 0.08 * breathStrength;
-          val = val * (1.0 + pulse);
-        }
-        val = Math.max(p.min * 0.9, Math.min(p.max * 1.1, val));
         set1f(p.uniform, val);
-        paramIndex++;
       }
     }
 

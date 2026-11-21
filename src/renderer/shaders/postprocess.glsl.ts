@@ -94,21 +94,22 @@ void main() {
         }
     }
 
-    // 2. Optical Bloom: Multi-tier HDR specular highlight scattering & atmospheric radiance
+    // 2. Optical Bloom: Smooth circular HDR highlight scattering (zero directional ghosting)
     if (u_bloomIntensity > 0.001) {
         vec2 texel = 1.0 / vec2(textureSize(u_accumTexture, 0));
         vec3 bloom = vec3(0.0);
 
-        // 16-tap multi-tier distribution (4 radial tiers: 3.5px, 9px, 22px, 52px)
+        // 16-tap smooth concentric circular distribution (radii: 2.5px, 5.5px, 10.0px, 16.0px)
+        // Uniform angular distribution prevents any discrete ghost twins or directional tearing
         const vec2 bloomOffsets[16] = vec2[](
-            // Tier 1: Tight specular halo (3.5 texels)
-            vec2( 0.0,  3.5), vec2( 3.5,  0.0), vec2( 0.0, -3.5), vec2(-3.5,  0.0),
-            // Tier 2: Medium specular body (9.0 texels)
-            vec2( 6.3,  6.3), vec2( 6.3, -6.3), vec2(-6.3, -6.3), vec2(-6.3,  6.3),
-            // Tier 3: Wide diffuse aura (22.0 texels)
-            vec2( 0.0, 22.0), vec2(22.0,  0.0), vec2( 0.0,-22.0), vec2(-22.0,  0.0),
-            // Tier 4: Broad atmospheric glow (52.0 texels)
-            vec2(36.8, 36.8), vec2(36.8,-36.8), vec2(-36.8,-36.8), vec2(-36.8, 36.8)
+            // Inner halo (2.5 texels)
+            vec2( 2.50,  0.00), vec2( 0.00,  2.50), vec2(-2.50,  0.00), vec2( 0.00, -2.50),
+            // Mid-inner halo (5.5 texels, rotated 45 deg)
+            vec2( 3.89,  3.89), vec2(-3.89,  3.89), vec2(-3.89, -3.89), vec2( 3.89, -3.89),
+            // Mid-outer aura (10.0 texels, rotated 22.5 deg)
+            vec2( 9.24,  3.83), vec2(-3.83,  9.24), vec2(-9.24, -3.83), vec2( 3.83, -9.24),
+            // Outer atmospheric glow (16.0 texels, rotated 67.5 deg)
+            vec2( 6.12, 14.78), vec2(-14.78,  6.12), vec2(-6.12, -14.78), vec2(14.78, -6.12)
         );
 
         const float bloomWeights[16] = float[](
@@ -123,8 +124,8 @@ void main() {
             vec3 tap = texture(u_accumTexture, tapUV).rgb;
             float luma = dot(tap, vec3(0.2126, 0.7152, 0.0722));
             
-            // Soft-knee threshold extraction: captures highlights, specular facets, and glowing edges
-            float threshold = 0.25;
+            // Soft-knee threshold extraction: highlights & specular glints glow, midtones keep rich contrast
+            float threshold = 0.32;
             float knee = 0.25;
             float soft = clamp((luma - threshold + knee) / (2.0 * knee), 0.0, 1.0);
             float weight = max(soft * soft, max(0.0, luma - threshold));
@@ -134,8 +135,8 @@ void main() {
         }
 
         // Add subtle warm anamorphic tint to the outer bloom aura
-        vec3 bloomTinted = mix(bloom, bloom * vec3(1.06, 0.98, 0.90), 0.35);
-        color += bloomTinted * (u_bloomIntensity * 4.2);
+        vec3 bloomTinted = mix(bloom, bloom * vec3(1.05, 0.98, 0.92), 0.30);
+        color += bloomTinted * (u_bloomIntensity * 2.0);
     }
 
     // Apply exposure

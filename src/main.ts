@@ -200,6 +200,14 @@ class App {
       const formulaParams = this.hud.getDynamicParams();
       const palette = this.hud.getActivePalette();
 
+      // Dynamically sculpt generative synth harmonics from active fractal math changes & camera proximity
+      const camDist = this.camera.position.clone().sub(this.camera.target).length();
+      this.hud.audioEngine.updateFractalMath({
+        formulaId: formula.id,
+        params: formulaParams,
+        cameraDistance: camDist
+      });
+
       this.raymarcher.render(
         formula,
         formulaParams,

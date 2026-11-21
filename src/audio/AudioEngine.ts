@@ -21,6 +21,41 @@ export interface AudioMetrics {
   duration: number;
 }
 
+export interface FractalMathAudioState {
+  formulaId: string;
+  params: Record<string, number>;
+  cameraDistance: number;
+}
+
+const FORMULA_BASE_FREQS: Record<string, number> = {
+  // Deep cosmic D minor drone
+  quaternion_julia: 73.42, // D2
+  ribbon_julia: 73.42,
+  quartz_julia: 73.42,
+  // A minor spherical warm harmonics
+  mandelbulb: 110.00, // A2
+  juliabulb: 110.00,
+  helix_bulb: 110.00,
+  // F minor organic gasket resonances
+  apollonian_gasket: 87.31, // F2
+  lace_gasket: 87.31,
+  pearl_gasket: 87.31,
+  // G minor crystalline origami
+  kifs: 98.00, // G2
+  wind_ship: 98.00,
+  burning_ship: 98.00,
+  // C minor deep structural / architectural bass
+  menger_sponge: 65.41, // C2
+  jerusalem_cube: 65.41,
+  vault_cube: 65.41,
+  twist_cube: 65.41,
+  // E minor sacred cathedral / geometric
+  cathedral: 82.41, // E2
+  tetrahedron: 82.41,
+  kaliset: 82.41,
+  kleinian: 82.41,
+};
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -32,11 +67,17 @@ export class AudioEngine {
   private audioElement: HTMLAudioElement | null = null;
   private fileSource: MediaElementAudioSourceNode | null = null;
 
-  // Generative Synth Nodes
-  private synthOsc1: OscillatorNode | null = null;
-  private synthOsc2: OscillatorNode | null = null;
+  // 3-Voice Generative Fractal Math Synthesizer
+  private synthOsc1: OscillatorNode | null = null; // Sub-bass fundamental drone
+  private synthOsc2: OscillatorNode | null = null; // Harmonic chord / fifth (tracks primary math param)
+  private synthOsc3: OscillatorNode | null = null; // High crystalline shimmer overtone (tracks detail/iterations)
   private synthFilter: BiquadFilterNode | null = null;
+  private synthGain1: GainNode | null = null;
+  private synthGain2: GainNode | null = null;
+  private synthGain3: GainNode | null = null;
+  private synthMasterGain: GainNode | null = null;
   private synthTimer: number | null = null;
+  private currentBaseFreq: number = 73.42;
 
   // Analysis State
   private sourceMode: 'off' | 'mic' | 'file' | 'synth' = 'off';
@@ -152,7 +193,7 @@ export class AudioEngine {
     };
   }
 
-  /** Plays built-in generative ambient drone synth (instant zero-friction demo) */
+  /** Plays built-in generative fractal math synthesizer (frequency, chords and filters sculpted by fractal math) */
   public enableSynth(): void {
     this.cleanupCurrentSource();
     const ctx = this.ensureContext();
@@ -160,52 +201,123 @@ export class AudioEngine {
     // 1. Resonant lowpass filter
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 420;
-    filter.Q.value = 3.5;
+    filter.frequency.value = 460;
+    filter.Q.value = 2.4;
 
-    // 2. Dual detuned warm chord oscillators (F minor 9th: 174 Hz & 261 Hz)
+    // Master synth gain node
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.32;
+
+    // Voice 1: Sub-Bass Fundamental Drone (warm triangle wave)
     const osc1 = ctx.createOscillator();
-    osc1.type = 'sawtooth';
-    osc1.frequency.value = 174.61; // F3
+    osc1.type = 'triangle';
+    osc1.frequency.value = this.currentBaseFreq;
+    const gain1 = ctx.createGain();
+    gain1.gain.value = 0.52;
+    osc1.connect(gain1);
+    gain1.connect(filter);
 
+    // Voice 2: Harmonic Chord / Melodic Voice (rich sawtooth/triangle wave with detune)
     const osc2 = ctx.createOscillator();
-    osc2.type = 'triangle';
-    osc2.frequency.value = 261.63; // C4
-    osc2.detune.value = 9;
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = this.currentBaseFreq * 1.5; // Musical fifth
+    osc2.detune.value = 6;
+    const gain2 = ctx.createGain();
+    gain2.gain.value = 0.28;
+    osc2.connect(gain2);
+    gain2.connect(filter);
 
-    const synthGain = ctx.createGain();
-    synthGain.gain.value = 0.28;
+    // Voice 3: Crystalline Shimmer / High Overtones (pure sine wave)
+    const osc3 = ctx.createOscillator();
+    osc3.type = 'sine';
+    osc3.frequency.value = this.currentBaseFreq * 3.0; // High harmonic
+    const gain3 = ctx.createGain();
+    gain3.gain.value = 0.14;
+    osc3.connect(gain3);
+    gain3.connect(filter);
 
-    osc1.connect(filter);
-    osc2.connect(filter);
-    filter.connect(synthGain);
-    synthGain.connect(this.analyser!);
-    synthGain.connect(this.gainNode!);
+    filter.connect(masterGain);
+    masterGain.connect(this.analyser!);
+    masterGain.connect(this.gainNode!);
 
     osc1.start();
     osc2.start();
+    osc3.start();
 
     this.synthOsc1 = osc1;
     this.synthOsc2 = osc2;
+    this.synthOsc3 = osc3;
+    this.synthGain1 = gain1;
+    this.synthGain2 = gain2;
+    this.synthGain3 = gain3;
     this.synthFilter = filter;
+    this.synthMasterGain = masterGain;
 
-    // Periodic pulsing bass sweep at ~96 BPM (ambient pulse)
-    let beatStep = 0;
+    // Organic LFO filter breathing (smooth slow ambient sweep)
+    let lfoPhase = 0;
     this.synthTimer = window.setInterval(() => {
-      if (!this.ctx || this.sourceMode !== 'synth') return;
+      if (!this.ctx || this.sourceMode !== 'synth' || !this.synthFilter) return;
       const t = this.ctx.currentTime;
-      beatStep = (beatStep + 1) % 4;
-      const targetFreq = beatStep === 0 ? 880 : 360 + Math.sin(beatStep) * 120;
-      filter.frequency.cancelScheduledValues(t);
-      filter.frequency.setValueAtTime(filter.frequency.value, t);
-      filter.frequency.exponentialRampToValueAtTime(targetFreq, t + 0.12);
-      filter.frequency.exponentialRampToValueAtTime(280, t + 0.55);
-    }, 625); // 96 BPM
+      lfoPhase += 0.25;
+      const lfoMod = Math.sin(lfoPhase) * 90;
+      const curFreq = this.synthFilter.frequency.value;
+      this.synthFilter.frequency.setTargetAtTime(Math.max(180, curFreq + lfoMod * 0.15), t, 0.35);
+    }, 450);
 
     this.sourceMode = 'synth';
-    this.trackName = 'Ambient Fractal Drone';
+    this.trackName = 'Fractal Math Synthesizer';
     this.isPlaying = true;
     this.notifyState();
+  }
+
+  /** Dynamically sculpts synth pitch, harmonics, filter cutoff & resonance from live fractal math */
+  public updateFractalMath(state: FractalMathAudioState): void {
+    if (this.sourceMode !== 'synth' || !this.ctx || !this.synthOsc1 || !this.synthOsc2 || !this.synthFilter) {
+      return;
+    }
+    const t = this.ctx.currentTime;
+
+    // 1. Base harmonic frequency for formula family
+    const baseFreq = FORMULA_BASE_FREQS[state.formulaId] ?? 73.42;
+    this.currentBaseFreq = baseFreq;
+
+    // 2. Extract primary and secondary mathematical parameters
+    const values = Object.values(state.params);
+    const p1 = values.length > 0 ? values[0] : 1.0;
+    const p2 = values.length > 1 ? values[1] : 0.0;
+    const p3 = values.length > 2 ? values[2] : 0.0;
+
+    // 3. Primary Parameter -> Continuous Harmonic Pitch Glide
+    const normalizedParam = Math.max(0.1, Math.min(12.0, Math.abs(p1)));
+    const pitchRatio = Math.pow(2.0, (Math.log2(normalizedParam) * 0.30));
+    const targetFreq1 = baseFreq;
+    const targetFreq2 = baseFreq * 1.5 * pitchRatio; // Fifth transposed by fractal scale
+    const targetFreq3 = baseFreq * 3.0 * Math.max(0.75, Math.min(2.0, 1.0 + p2 * 0.15));
+
+    this.synthOsc1.frequency.setTargetAtTime(targetFreq1, t, 0.08);
+    this.synthOsc2.frequency.setTargetAtTime(Math.max(40, Math.min(1200, targetFreq2)), t, 0.08);
+    if (this.synthOsc3) {
+      this.synthOsc3.frequency.setTargetAtTime(Math.max(100, Math.min(2400, targetFreq3)), t, 0.08);
+    }
+
+    // 4. Secondary Parameter (Twist, Wave, Fold) -> Filter Cutoff, Resonance & Detune
+    const targetCutoff = Math.max(200, Math.min(2600, 320 + Math.abs(p1) * 140 + Math.abs(p2) * 260));
+    const targetQ = Math.max(1.0, Math.min(5.5, 1.8 + Math.abs(p2) * 2.8));
+    this.synthFilter.frequency.setTargetAtTime(targetCutoff, t, 0.08);
+    this.synthFilter.Q.setTargetAtTime(targetQ, t, 0.08);
+
+    // Detune modulation (analog chorus width from twist/wave)
+    const targetDetune = Math.max(-20, Math.min(20, p2 * 10.0 + (p3 - 1.0) * 6.0));
+    this.synthOsc2.detune.setTargetAtTime(targetDetune, t, 0.08);
+
+    // 5. Camera Proximity -> Sub-Bass & Air Balance
+    if (this.synthGain1 && this.synthGain3) {
+      const dist = Math.max(0.5, Math.min(10.0, state.cameraDistance));
+      const subGain = Math.max(0.35, Math.min(0.68, 0.65 - dist * 0.035));
+      const shimmerGain = Math.max(0.06, Math.min(0.30, 0.08 + dist * 0.022));
+      this.synthGain1.gain.setTargetAtTime(subGain, t, 0.1);
+      this.synthGain3.gain.setTargetAtTime(shimmerGain, t, 0.1);
+    }
   }
 
   /** Toggles play/pause for file and synth playback */
@@ -262,9 +374,30 @@ export class AudioEngine {
       this.synthOsc2.disconnect();
       this.synthOsc2 = null;
     }
+    if (this.synthOsc3) {
+      try { this.synthOsc3.stop(); } catch { /* ignore */ }
+      this.synthOsc3.disconnect();
+      this.synthOsc3 = null;
+    }
+    if (this.synthGain1) {
+      this.synthGain1.disconnect();
+      this.synthGain1 = null;
+    }
+    if (this.synthGain2) {
+      this.synthGain2.disconnect();
+      this.synthGain2 = null;
+    }
+    if (this.synthGain3) {
+      this.synthGain3.disconnect();
+      this.synthGain3 = null;
+    }
     if (this.synthFilter) {
       this.synthFilter.disconnect();
       this.synthFilter = null;
+    }
+    if (this.synthMasterGain) {
+      this.synthMasterGain.disconnect();
+      this.synthMasterGain = null;
     }
     if (this.synthTimer !== null) {
       clearInterval(this.synthTimer);
