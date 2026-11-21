@@ -268,6 +268,38 @@
               </div>
             </div>
 
+            <!-- Multi-Material & Self-Lit Glowing Micro-Cores -->
+            <div class="control-section">
+              <span class="section-tag">MULTI-MATERIAL & CORES</span>
+              <h3>Self-Lit Micro-Cores & Glowing Nodes</h3>
+              <div class="control-row">
+                <label>Core Glow Intensity</label>
+                <input type="range" id="param-core-glow" min="0.0" max="4.0" step="0.05" value="1.40">
+                <span class="val-display" id="val-core-glow">1.40</span>
+              </div>
+              <div class="control-row">
+                <label>Core Node Density</label>
+                <input type="range" id="param-core-thresh" min="0.05" max="0.50" step="0.01" value="0.22">
+                <span class="val-display" id="val-core-thresh">0.22</span>
+              </div>
+              <div class="control-row">
+                <label>Energy Theme</label>
+                <select id="param-core-theme" class="studio-select" style="grid-column: span 2; width: 100%;">
+                  <option value="amber" selected>Solar Amber (Incandescent Gold)</option>
+                  <option value="cyan">Electric Cyan (Cyber Core)</option>
+                  <option value="magenta">Plasma Magenta (Neon Violet)</option>
+                  <option value="emerald">Bioluminescent Emerald (Alien Flora)</option>
+                  <option value="gold">Molten Gold (Imperial Forge)</option>
+                  <option value="white">Starlight Supernova (Pure White)</option>
+                </select>
+              </div>
+              <div class="control-row">
+                <label>Core Specular Polish</label>
+                <input type="range" id="param-core-polish" min="0.0" max="1.0" step="0.05" value="0.85">
+                <span class="val-display" id="val-core-polish">0.85</span>
+              </div>
+            </div>
+
             <!-- Tab Footer: Storage Actions -->
             <div class="tab-bottom-section">
               <div class="tab-storage-actions">

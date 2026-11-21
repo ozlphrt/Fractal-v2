@@ -71,6 +71,12 @@ uniform vec3 u_palB;
 uniform vec3 u_palC;
 uniform vec3 u_palD;
 
+// Multi-Material Core & Self-Lit Glowing Elements
+uniform float u_coreGlow;
+uniform vec3 u_coreColor;
+uniform float u_coreThreshold;
+uniform float u_corePolish;
+
 // Formula-specific dynamic parameter uniforms
 ${formulaUniforms}
 
@@ -158,8 +164,9 @@ void main() {
     vec4 finalTrap = vec4(0.0);
     bool hit = false;
     vec3 hitPos = vec3(0.0);
-    float glow = 0.0;
+    vec3 glowAccum = vec3(0.0);
     float godrays = 0.0;
+    vec3 baseGlowTint = mix(u_palA * 0.7, vec3(0.1, 0.35, 0.9), 0.45);
 
     int maxIters = u_maxSteps > 0 ? u_maxSteps : 180;
     for (int i = 0; i < 350; i++) {
@@ -167,11 +174,13 @@ void main() {
         vec3 currPos = rayOrigin + rayDir * t;
         float d = mapFractal(currPos, trap);
 
-        // Calibrated volumetric step glow with organic audio breathing
+        // Calibrated volumetric step glow with self-lit core color bleeding
         if (u_glowIntensity > 0.001 && d < 0.35) {
             float g = max(0.0, 1.0 - d * 2.8);
             float audioGlow = 1.0 + (u_audioMid * 1.8 + u_audioBass * 1.4 + u_audioBeat * 2.0) * u_audioGlowMod;
-            glow += g * g * 0.012 * u_glowIntensity * audioGlow;
+            float stepCoreMask = (u_coreGlow > 0.01) ? smoothstep(u_coreThreshold * 1.4, u_coreThreshold * 0.25, min(trap.w, trap.y)) : 0.0;
+            vec3 stepTint = mix(baseGlowTint, u_coreColor, stepCoreMask * 0.80);
+            glowAccum += stepTint * (g * g * 0.012 * u_glowIntensity * audioGlow);
         }
 
         // Soft atmospheric god rays with bass modulation
@@ -205,27 +214,40 @@ void main() {
         float trapVal = finalTrap.x;
         float colorFlow = (u_audioLevel * 0.45 + u_audioBeat * 0.35) * u_audioColorShift;
         float tCoord = trapVal * 0.45 + colorFlow;
-        vec3 albedo = clamp(cosinePalette(tCoord, u_palA, u_palB, u_palC, u_palD), 0.0, 1.0);
-
-        // Diffuse & Specular Lighting
-        float diff = clamp(dot(nor, u_lightDir), 0.0, 1.0);
-        vec3 halfVec = normalize(u_lightDir + viewDir);
-        float spec = pow(clamp(dot(nor, halfVec), 0.0, 1.0), 24.0);
+        vec3 bedrockAlbedo = clamp(cosinePalette(tCoord, u_palA, u_palB, u_palC, u_palD), 0.0, 1.0);
 
         // Soft Shadows & AO
+        float diff = clamp(dot(nor, u_lightDir), 0.0, 1.0);
+        vec3 halfVec = normalize(u_lightDir + viewDir);
         float shadow = (diff > 0.015) ? calcShadow(hitPos + nor * max(0.012, normEps * 3.0), u_lightDir, 0.025, 4.0, 12.0) : 0.0;
         float ao = calcAO(hitPos, nor, u_jitter);
 
         // Natural rock crevice weathering
-        albedo = mix(albedo * 0.65, albedo, smoothstep(0.1, 0.9, ao));
+        bedrockAlbedo = mix(bedrockAlbedo * 0.65, bedrockAlbedo, smoothstep(0.1, 0.9, ao));
+
+        // Multi-Material Core Discrimination:
+        // Distinguishes massive macro bedrock from recursive micro-cores & nested sub-nodes
+        float coreMetric = min(finalTrap.w, finalTrap.y);
+        float coreMask = (u_coreGlow > 0.001) 
+            ? smoothstep(u_coreThreshold, u_coreThreshold * 0.25, coreMetric) 
+            : 0.0;
+
+        // Core Albedo (polished contrasting mineral / metallic hue)
+        vec3 coreAlbedo = mix(bedrockAlbedo * 0.35, u_coreColor, 0.85);
+        vec3 surfaceAlbedo = mix(bedrockAlbedo, coreAlbedo, coreMask);
+
+        // Specular Power Contrast:
+        // Bedrock is rough weathered stone (shininess 20); Cores are polished metallic glass (shininess up to 96)
+        float specTreble = 0.22 + (u_audioTreble * 1.35 + u_audioBeat * 0.65) * u_audioGlowMod;
+        float specShininess = mix(20.0, mix(36.0, 96.0, u_corePolish), coreMask);
+        float specRoughFactor = pow(clamp(dot(nor, halfVec), 0.0, 1.0), specShininess);
+        float specGlint = mix(specTreble, 1.8 * u_corePolish, coreMask);
+        vec3 sunColor = vec3(1.0, 0.94, 0.85);
+        vec3 specularLight = specRoughFactor * shadow * sunColor * specGlint * u_sunIntensity;
 
         // 1. Primary Sun Light with bass breathing
-        vec3 sunColor = vec3(1.0, 0.94, 0.85);
         float sunAudio = 1.0 + (u_audioBass * 0.70 + u_audioBeat * 0.55) * u_audioGlowMod;
         vec3 directLight = diff * shadow * sunColor * 0.95 * u_sunIntensity * sunAudio;
-        // Treble glint shimmer on fine rock facets
-        float specTreble = 0.22 + (u_audioTreble * 1.35 + u_audioBeat * 0.65) * u_audioGlowMod;
-        vec3 specularLight = spec * shadow * sunColor * specTreble * u_sunIntensity;
 
         // 2. Secondary Fill / Bounce Light (soft cool ambient bounce so shadows reveal geological detail)
         vec3 fillDir = normalize(vec3(-u_lightDir.z, -0.3, u_lightDir.x));
@@ -259,14 +281,22 @@ void main() {
         vec3 ambientFill = vec3(0.12, 0.14, 0.18) * (0.5 + 0.5 * nor.y);
         vec3 ambientLight = ambientFill * ao * 0.5;
 
-        // Assemble total surface illumination
-        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * albedo + specularLight + rimLight;
+        // Assemble illuminated surface with dual-material properties
+        sceneColor = (directLight + fillLight + ambientLight + headlampLight) * surfaceAlbedo + specularLight + rimLight;
+
+        // Self-Lit Core Luminescence & Audio Energy Pulsing
+        if (u_coreGlow > 0.01 && coreMask > 0.001) {
+            float coreAudio = 1.0 + (u_audioBass * 1.6 + u_audioBeat * 2.0) * u_audioGlowMod;
+            vec3 coreEmissive = u_coreColor * u_coreGlow * coreAudio;
+            // Hot inner incandescent radiance with smooth falloff
+            sceneColor += coreEmissive * (coreMask * coreMask * 1.65);
+        }
 
         // Subtle optional emissive veins with bass pulse
         if (u_emissiveVeins > 0.01) {
             float vein = pow(clamp(1.0 - finalTrap.y * 3.0, 0.0, 1.0), 4.0);
             float veinAudio = 1.0 + (u_audioBass * 1.2 + u_audioBeat * 1.0) * u_audioGlowMod;
-            sceneColor += albedo * vein * u_emissiveVeins * 0.3 * veinAudio;
+            sceneColor += surfaceAlbedo * vein * u_emissiveVeins * 0.3 * veinAudio;
         }
 
         // Distance fog smoothly dissolving into deep space background (evaluated only near horizon for massive FPS gain)
@@ -281,9 +311,8 @@ void main() {
         sceneColor = renderSpaceBackground(rayDir, u_lightDir, u_time);
     }
 
-    // Additive volumetric glow (cool blue-tinted atmospheric mist)
-    vec3 glowTint = mix(u_palA * 0.7, vec3(0.1, 0.35, 0.9), 0.45);
-    sceneColor += glow * glowTint;
+    // Additive volumetric glow (cool atmospheric mist + self-lit core color bleeding)
+    sceneColor += glowAccum;
     sceneColor += godrays * vec3(0.9, 0.85, 0.7);
 
     fragColor = vec4(sceneColor, 1.0);

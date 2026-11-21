@@ -73,6 +73,12 @@ export class HUD {
       bloomIntensity: 0.25,
       exposure: 1.0,
 
+      // Multi-Material Core & Self-Lit Glowing Elements
+      coreGlow: 1.40,
+      coreThreshold: 0.22,
+      coreTheme: 'amber',
+      corePolish: 0.85,
+
       // Calibrated 3-Point Studio Lighting & Atmosphere
       sunIntensity: 1.0,
       rimIntensity: 0.32,
@@ -130,6 +136,11 @@ export class HUD {
       this.setRangeValue('param-mat-dispersion', 'val-mat-dispersion', this.settings.dispersion);
       this.setRangeValue('param-mat-sss', 'val-mat-sss', this.settings.subsurface);
       this.setRangeValue('param-mat-emissive', 'val-mat-emissive', this.settings.emissiveVeins);
+      this.setRangeValue('param-core-glow', 'val-core-glow', this.settings.coreGlow);
+      this.setRangeValue('param-core-thresh', 'val-core-thresh', this.settings.coreThreshold);
+      this.setRangeValue('param-core-polish', 'val-core-polish', this.settings.corePolish);
+      const coreThemeEl = document.getElementById('param-core-theme') as HTMLSelectElement | null;
+      if (coreThemeEl) coreThemeEl.value = this.settings.coreTheme || 'amber';
 
       this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity);
       this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity);
@@ -254,6 +265,13 @@ export class HUD {
     this.bindRange('param-mat-dispersion', 'val-mat-dispersion', val => this.settings.dispersion = val);
     this.bindRange('param-mat-sss', 'val-mat-sss', val => this.settings.subsurface = val);
     this.bindRange('param-mat-emissive', 'val-mat-emissive', val => this.settings.emissiveVeins = val);
+    this.bindRange('param-core-glow', 'val-core-glow', val => this.settings.coreGlow = val);
+    this.bindRange('param-core-thresh', 'val-core-thresh', val => this.settings.coreThreshold = val);
+    this.bindRange('param-core-polish', 'val-core-polish', val => this.settings.corePolish = val);
+    document.getElementById('param-core-theme')?.addEventListener('change', (e) => {
+      this.settings.coreTheme = (e.target as HTMLSelectElement).value;
+      this.onSettingChange?.();
+    });
 
     // Populate Material dropdown in Materials tab
     const matDropdown = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
@@ -1047,7 +1065,7 @@ export class HUD {
     }
   }
 
-  public getTabValues(tabId: string): Record<string, number> {
+  public getTabValues(tabId: string): Record<string, any> {
     if (tabId === 'tab-optics') {
       return {
         focalDistance: this.settings.focalDistance,
@@ -1060,7 +1078,11 @@ export class HUD {
         ior: this.settings.ior,
         dispersion: this.settings.dispersion,
         subsurface: this.settings.subsurface,
-        emissiveVeins: this.settings.emissiveVeins
+        emissiveVeins: this.settings.emissiveVeins,
+        coreGlow: this.settings.coreGlow,
+        coreThreshold: this.settings.coreThreshold,
+        corePolish: this.settings.corePolish,
+        coreTheme: this.settings.coreTheme
       };
     } else if (tabId === 'tab-lighting') {
       return {
@@ -1080,7 +1102,7 @@ export class HUD {
     return {};
   }
 
-  public applyTabValues(tabId: string, values: Record<string, number>) {
+  public applyTabValues(tabId: string, values: Record<string, any>) {
     if (tabId === 'tab-optics') {
       if (values.focalDistance !== undefined) this.setRangeValue('param-focal-dist', 'val-focal-dist', this.settings.focalDistance = values.focalDistance);
       if (values.aperture !== undefined) this.setRangeValue('param-aperture', 'val-aperture', this.settings.aperture = values.aperture);
@@ -1091,6 +1113,14 @@ export class HUD {
       if (values.dispersion !== undefined) this.setRangeValue('param-mat-dispersion', 'val-mat-dispersion', this.settings.dispersion = values.dispersion);
       if (values.subsurface !== undefined) this.setRangeValue('param-mat-sss', 'val-mat-sss', this.settings.subsurface = values.subsurface);
       if (values.emissiveVeins !== undefined) this.setRangeValue('param-mat-emissive', 'val-mat-emissive', this.settings.emissiveVeins = values.emissiveVeins);
+      if (values.coreGlow !== undefined) this.setRangeValue('param-core-glow', 'val-core-glow', this.settings.coreGlow = values.coreGlow);
+      if (values.coreThreshold !== undefined) this.setRangeValue('param-core-thresh', 'val-core-thresh', this.settings.coreThreshold = values.coreThreshold);
+      if (values.corePolish !== undefined) this.setRangeValue('param-core-polish', 'val-core-polish', this.settings.corePolish = values.corePolish);
+      if (values.coreTheme !== undefined) {
+        this.settings.coreTheme = values.coreTheme;
+        const themeEl = document.getElementById('param-core-theme') as HTMLSelectElement | null;
+        if (themeEl) themeEl.value = values.coreTheme;
+      }
     } else if (tabId === 'tab-lighting') {
       if (values.sunIntensity !== undefined) this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity = values.sunIntensity);
       if (values.rimIntensity !== undefined) this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity = values.rimIntensity);

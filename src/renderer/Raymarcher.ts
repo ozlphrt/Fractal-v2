@@ -1,7 +1,7 @@
 // src/renderer/Raymarcher.ts
 // Primary WebGL2 rendering coordinator linking Raymarching, Accumulation, and Post-Processing
 
-import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
+import { FormulaDefinition, PalettePreset, RenderSettings, CORE_THEMES } from '../core/types.ts';
 import { RAYMARCH_VERT, buildRaymarchFrag } from './shaders/raymarch.glsl.ts';
 import { Accumulator } from './Accumulator.ts';
 import { PostProcessor } from './PostProcessor.ts';
@@ -385,6 +385,18 @@ export class Raymarcher {
     set1f('u_dispersion', settings.dispersion);
     set1f('u_subsurface', settings.subsurface);
     set1f('u_emissiveVeins', settings.emissiveVeins);
+
+    // Multi-Material Core & Self-Lit Glowing Elements Uniforms
+    const coreGlow = settings.coreGlow ?? 1.40;
+    const coreThresh = settings.coreThreshold ?? 0.22;
+    const corePolish = settings.corePolish ?? 0.85;
+    const coreTheme = settings.coreTheme ?? 'amber';
+    const coreRGB = CORE_THEMES[coreTheme] || CORE_THEMES.amber;
+
+    set1f('u_coreGlow', coreGlow);
+    set1f('u_coreThreshold', coreThresh);
+    set1f('u_corePolish', corePolish);
+    set3f('u_coreColor', coreRGB[0], coreRGB[1], coreRGB[2]);
 
     // Volumetrics & Lighting
     const azRad = (settings.lightAzimuth * Math.PI) / 180.0;
