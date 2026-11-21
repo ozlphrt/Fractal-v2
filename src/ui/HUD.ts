@@ -1850,9 +1850,15 @@ export class HUD {
 
     if (!chip || !icon || !label) return;
 
+    const SVG_OFF = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`;
+    const SVG_MIC = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`;
+    const SVG_FILE = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`;
+    const SVG_PAUSE = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+    const SVG_SYNTH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>`;
+
     if (!metrics.active || metrics.source === 'off') {
       chip.classList.remove('active');
-      icon.textContent = '🎙️';
+      icon.innerHTML = SVG_OFF;
       label.textContent = 'Audio: Off';
       if (spec) spec.style.display = 'none';
       if (trackRow) trackRow.style.display = 'none';
@@ -1864,12 +1870,12 @@ export class HUD {
     if (spec) spec.style.display = 'flex';
 
     if (metrics.source === 'mic') {
-      icon.textContent = '🎙️';
+      icon.innerHTML = SVG_MIC;
       label.textContent = 'Audio: Mic';
       if (trackRow) trackRow.style.display = 'none';
       this.updateAudioSourceButtons('mic');
     } else if (metrics.source === 'file') {
-      icon.textContent = metrics.isPlaying ? '🎵' : '⏸️';
+      icon.innerHTML = metrics.isPlaying ? SVG_FILE : SVG_PAUSE;
       label.textContent = metrics.trackName ? `Audio: ${metrics.trackName}` : 'Audio: File';
       if (trackRow) {
         trackRow.style.display = 'flex';
@@ -1877,7 +1883,7 @@ export class HUD {
       }
       this.updateAudioSourceButtons('file');
     } else if (metrics.source === 'synth') {
-      icon.textContent = '🎛️';
+      icon.innerHTML = SVG_SYNTH;
       label.textContent = 'Audio: Synth';
       if (trackRow) {
         trackRow.style.display = 'flex';
