@@ -7,6 +7,7 @@ export default defineConfig({
     port: 3000,
     open: false,
     host: true,
+    allowedHosts: true,
     watch: {
       ignored: ['**/_reference/**', '**/.git/**']
     }
