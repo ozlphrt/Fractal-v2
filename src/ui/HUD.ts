@@ -74,8 +74,10 @@ export class HUD {
       exposure: 1.0,
 
       // Flying Cavity Lights (Photon Orbs)
+      orbEnabled: true,
       orbIntensity: 1.20,
       orbSpeed: 1.00,
+      orbRadius: 0.016,
 
       // Calibrated 3-Point Studio Lighting & Atmosphere
       sunIntensity: 1.0,
@@ -123,6 +125,28 @@ export class HUD {
     return this.currentPalette;
   }
 
+  private updateOrbToggleUI(enabled: boolean) {
+    const btn = document.getElementById('param-orb-toggle');
+    const text = document.getElementById('param-orb-toggle-text');
+    const led = document.getElementById('param-orb-toggle-led');
+    if (!btn || !text || !led) return;
+    if (enabled) {
+      btn.style.background = 'rgba(56, 189, 248, 0.12)';
+      btn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+      btn.style.color = '#38bdf8';
+      text.textContent = 'ENABLED';
+      led.style.background = '#38bdf8';
+      led.style.boxShadow = '0 0 8px #38bdf8';
+    } else {
+      btn.style.background = 'rgba(255, 255, 255, 0.04)';
+      btn.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+      btn.style.color = 'var(--text-tertiary)';
+      text.textContent = 'DISABLED';
+      led.style.background = '#555';
+      led.style.boxShadow = 'none';
+    }
+  }
+
   private setupEventListeners() {
     const updateDisplays = () => {
       this.setRangeValue('param-focal-dist', 'val-focal-dist', this.settings.focalDistance);
@@ -134,8 +158,10 @@ export class HUD {
       this.setRangeValue('param-mat-dispersion', 'val-mat-dispersion', this.settings.dispersion);
       this.setRangeValue('param-mat-sss', 'val-mat-sss', this.settings.subsurface);
       this.setRangeValue('param-mat-emissive', 'val-mat-emissive', this.settings.emissiveVeins);
+      this.updateOrbToggleUI(this.settings.orbEnabled);
       this.setRangeValue('param-orb-intensity', 'val-orb-intensity', this.settings.orbIntensity);
       this.setRangeValue('param-orb-speed', 'val-orb-speed', this.settings.orbSpeed);
+      this.setRangeValue('param-orb-radius', 'val-orb-radius', this.settings.orbRadius);
 
       this.setRangeValue('param-sun-intensity', 'val-sun-intensity', this.settings.sunIntensity);
       this.setRangeValue('param-rim-intensity', 'val-rim-intensity', this.settings.rimIntensity);
@@ -260,8 +286,14 @@ export class HUD {
     this.bindRange('param-mat-dispersion', 'val-mat-dispersion', val => this.settings.dispersion = val);
     this.bindRange('param-mat-sss', 'val-mat-sss', val => this.settings.subsurface = val);
     this.bindRange('param-mat-emissive', 'val-mat-emissive', val => this.settings.emissiveVeins = val);
+    document.getElementById('param-orb-toggle')?.addEventListener('click', () => {
+      this.settings.orbEnabled = !this.settings.orbEnabled;
+      this.updateOrbToggleUI(this.settings.orbEnabled);
+      this.onSettingChange?.();
+    });
     this.bindRange('param-orb-intensity', 'val-orb-intensity', val => this.settings.orbIntensity = val);
     this.bindRange('param-orb-speed', 'val-orb-speed', val => this.settings.orbSpeed = val);
+    this.bindRange('param-orb-radius', 'val-orb-radius', val => this.settings.orbRadius = val);
 
     // Populate Material dropdown in Materials tab
     const matDropdown = document.getElementById('material-dropdown-select') as HTMLSelectElement | null;
@@ -1081,8 +1113,10 @@ export class HUD {
         lightElevation: this.settings.lightElevation,
         fogDensity: this.settings.fogDensity,
         godraysIntensity: this.settings.godraysIntensity,
+        orbEnabled: this.settings.orbEnabled,
         orbIntensity: this.settings.orbIntensity,
-        orbSpeed: this.settings.orbSpeed
+        orbSpeed: this.settings.orbSpeed,
+        orbRadius: this.settings.orbRadius
       };
     } else if (tabId === 'tab-params') {
       return this.getDynamicParams();
@@ -1111,8 +1145,13 @@ export class HUD {
       if (values.lightElevation !== undefined) this.setRangeValue('param-light-elevation', 'val-light-elevation', this.settings.lightElevation = values.lightElevation, '°');
       if (values.fogDensity !== undefined) this.setRangeValue('param-fog', 'val-fog', this.settings.fogDensity = values.fogDensity);
       if (values.godraysIntensity !== undefined) this.setRangeValue('param-godrays', 'val-godrays', this.settings.godraysIntensity = values.godraysIntensity);
+      if (values.orbEnabled !== undefined) {
+        this.settings.orbEnabled = values.orbEnabled;
+        this.updateOrbToggleUI(this.settings.orbEnabled);
+      }
       if (values.orbIntensity !== undefined) this.setRangeValue('param-orb-intensity', 'val-orb-intensity', this.settings.orbIntensity = values.orbIntensity);
       if (values.orbSpeed !== undefined) this.setRangeValue('param-orb-speed', 'val-orb-speed', this.settings.orbSpeed = values.orbSpeed);
+      if (values.orbRadius !== undefined) this.setRangeValue('param-orb-radius', 'val-orb-radius', this.settings.orbRadius = values.orbRadius);
     } else if (tabId === 'tab-params') {
       // In Random Mode, keep user's live formula parameters intact during flythrough
       if (this.isRandomMode) return;

@@ -44,8 +44,10 @@ export interface RenderSettings {
   emissiveVeins: number;
 
   // Flying Cavity Lights (Photon Orbs)
+  orbEnabled: boolean;       // Master on/off toggle for flying cavity lights
   orbIntensity: number;      // Intensity of flying cavity light sources (0.0 - 3.0, default 1.20)
   orbSpeed: number;          // Speed of cavity light orbs (0.1 - 3.0, default 1.00)
+  orbRadius: number;         // Physical size of the light balls (0.006 - 0.040, default 0.016)
 
   // Post & Bloom
   bloomIntensity: number;

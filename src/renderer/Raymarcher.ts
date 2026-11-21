@@ -387,8 +387,10 @@ export class Raymarcher {
     set1f('u_emissiveVeins', settings.emissiveVeins);
 
     // Flying Cavity Lights (Photon Orbs) Uniforms
-    set1f('u_orbIntensity', settings.orbIntensity ?? 1.20);
+    const orbActive = settings.orbEnabled !== false && (settings.orbIntensity ?? 1.20) > 0.001;
+    set1f('u_orbIntensity', orbActive ? (settings.orbIntensity ?? 1.20) : 0.0);
     set1f('u_orbSpeed', settings.orbSpeed ?? 1.00);
+    set1f('u_orbRadius', settings.orbRadius ?? 0.016);
 
     // Volumetrics & Lighting
     const azRad = (settings.lightAzimuth * Math.PI) / 180.0;
