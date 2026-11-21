@@ -365,18 +365,12 @@ export class Raymarcher {
     const jy = settings.progressiveAccumulation ? halton(sampleIdx, 3) - 0.5 : 0.0;
     set2f('u_jitter', jx, jy);
 
-    // Circular lens aperture jitter (active whenever aperture > 0, responsive in real-time)
+    // Circular lens aperture jitter (active ONLY during progressive accumulation for smooth Monte Carlo convergence)
     let lensR = 0.0;
     let lensTheta = 0.0;
-    if (settings.aperture > 0.0) {
-      if (settings.progressiveAccumulation) {
-        lensR = Math.sqrt(halton(sampleIdx, 5));
-        lensTheta = halton(sampleIdx, 7) * 2.0 * Math.PI;
-      } else {
-        const sampleStep = (time * 60.0) % 64.0;
-        lensR = Math.sqrt(halton(Math.floor(sampleStep) + 1, 5));
-        lensTheta = halton(Math.floor(sampleStep) + 1, 7) * 2.0 * Math.PI;
-      }
+    if (settings.progressiveAccumulation && settings.aperture > 0.0) {
+      lensR = Math.sqrt(halton(sampleIdx, 5));
+      lensTheta = halton(sampleIdx, 7) * 2.0 * Math.PI;
     }
     set2f('u_lensJitter', lensR * Math.cos(lensTheta), lensR * Math.sin(lensTheta));
 

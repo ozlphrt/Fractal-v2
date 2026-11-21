@@ -286,8 +286,11 @@ void main() {
     sceneColor += glow * glowTint;
     sceneColor += godrays * vec3(0.9, 0.85, 0.7);
 
-    // Alpha channel preserves exact surface hit distance t for depth-aware optical DoF & bokeh
-    fragColor = vec4(sceneColor, hit ? t : 999.0);
+    // Store normalized linear depth in alpha channel (0.0 at camera, 1.0 at MAX_DEPTH = 25.0 world units)
+    // Guarantees zero clamping / overflow distortion across all framebuffer formats (RGBA8, RGBA16F)
+    const float MAX_DEPTH = 25.0;
+    float depthOut = hit ? clamp(t, 0.0, MAX_DEPTH) : MAX_DEPTH;
+    fragColor = vec4(sceneColor, depthOut / MAX_DEPTH);
 }
 `;
 }
