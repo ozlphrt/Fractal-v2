@@ -4,6 +4,7 @@
 import { Raymarcher } from './renderer/Raymarcher.ts';
 import { Camera } from './camera/Camera.ts';
 import { OrbitController } from './camera/OrbitController.ts';
+import { GamepadController } from './camera/GamepadController.ts';
 import { HUD } from './ui/HUD.ts';
 
 class App {
@@ -11,6 +12,7 @@ class App {
   private raymarcher: Raymarcher;
   private camera: Camera;
   private orbitController: OrbitController;
+  private gamepadController: GamepadController;
   private hud: HUD;
 
   private lastTime: number = performance.now();
@@ -31,13 +33,15 @@ class App {
     );
 
     this.orbitController = new OrbitController(this.camera, this.canvas);
+    this.gamepadController = new GamepadController(this.camera, this.orbitController, this.hud);
 
     this.setupHUDListeners();
     this.setupWindowListeners();
     this.startLoop();
 
-    // Grabbing the camera takes control back from the auto-play tour
+    // Grabbing the camera or using gamepad takes control back from the auto-play tour
     this.orbitController.onUserInteract = () => this.hud.pauseTourOnInteract();
+    this.gamepadController.onInteract = () => this.hud.pauseTourOnInteract();
 
     // Auto-play in autonomous Random Mode on launch (starts on a random formula with procedural flythrough)
     setTimeout(() => this.hud.autoStartRandom(), 900);
@@ -168,6 +172,7 @@ class App {
 
       // Camera controller update
       this.orbitController.update(dt);
+      this.gamepadController.update(dt);
 
       // Viewport compensation when settings panel is open
       const drawer = document.getElementById('settings-drawer');

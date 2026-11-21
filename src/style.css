@@ -1530,12 +1530,6 @@ input[type="range"]:active::-webkit-slider-thumb {
   transition: color 0.18s ease;
 }
 
-.audio-chip-btn:focus,
-.audio-chip-btn:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
 .audio-chip-btn:hover {
   color: var(--text-primary);
 }
@@ -1637,12 +1631,6 @@ input[type="range"]:active::-webkit-slider-thumb {
   transition: all 0.18s ease;
 }
 
-.audio-chip-action:focus,
-.audio-chip-action:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
 .audio-chip-action:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.08);
@@ -1698,5 +1686,79 @@ input[type="range"]:active::-webkit-slider-thumb {
   font-family: var(--font-sans);
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+/* =========================================================================
+   GAMEPAD TELEMETRY BADGE & FLOATING TOAST
+   ========================================================================= */
+
+.hud-gamepad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  user-select: none;
+}
+
+.hud-gamepad-badge.hidden {
+  display: none;
+}
+
+.gamepad-icon {
+  animation: pulseGamepad 2.5s infinite ease-in-out;
+}
+
+@keyframes pulseGamepad {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; filter: drop-shadow(0 0 4px #34d399); }
+}
+
+.gamepad-toast {
+  position: fixed;
+  top: 4.8rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.2);
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gamepad-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(4px);
+}
+
+.gamepad-toast.hidden {
+  display: none;
+}
+
+/* Cinematic Clean Screen Mode (Toggled via Gamepad 'B' button) */
+#hud-container.cinematic-hide {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
 }
 

@@ -69,9 +69,23 @@
         </div>
 
         <div class="hud-telemetry" id="hud-performance">
+          <!-- Gamepad Telemetry Badge -->
+          <div class="hud-gamepad-badge hidden" id="hud-gamepad-badge" title="Controller Connected (Press View/Back to toggle Flight/Orbit)">
+            <svg class="gamepad-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="6" y1="12" x2="10" y2="12"></line>
+              <line x1="8" y1="10" x2="8" y2="14"></line>
+              <line x1="15" y1="13" x2="15.01" y2="13"></line>
+              <line x1="18" y1="11" x2="18.01" y2="11"></line>
+              <rect x="2" y="6" width="20" height="12" rx="6"></rect>
+            </svg>
+            <span id="gamepad-mode-label" class="gamepad-mode-text">FLIGHT</span>
+          </div>
           <span class="telem-item"><span id="fps-counter" class="mono-num">60</span> FPS</span>
         </div>
       </header>
+
+      <!-- Floating Gamepad Toast Notification -->
+      <div id="gamepad-toast" class="gamepad-toast hidden"></div>
 
       <!-- Formula Selection Popover (Tapped from bottom dock) -->
       <div class="studio-popover closed" id="formula-popover" role="dialog" aria-modal="true"
@@ -356,52 +370,6 @@
                 <label>God Rays (Shafts)</label>
                 <input type="range" id="param-godrays" min="0.0" max="1.0" step="0.005" value="0.0">
                 <span class="val-display" id="val-godrays">0.00</span>
-              </div>
-            </div>
-
-            <!-- Flying Cavity Lights (Photon Orbs) -->
-            <div class="control-section">
-              <span class="section-tag">FLYING CAVITY LIGHTS</span>
-              <h3>Luminous Cavity Orbs</h3>
-              <div class="control-row">
-                <label>Flying Orbs</label>
-                <button type="button" id="param-orb-toggle" class="studio-btn-toggle active" style="grid-column: 2 / span 2; display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0.65rem; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; color: #38bdf8; font-size: 0.72rem; font-family: var(--font-mono); cursor: pointer; transition: all 0.2s ease;">
-                  <span id="param-orb-toggle-text">ENABLED</span>
-                  <span id="param-orb-toggle-led" style="width: 7px; height: 7px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 8px #38bdf8;"></span>
-                </button>
-              </div>
-              <div class="control-row">
-                <label>Color Theme</label>
-                <select id="param-orb-preset" class="studio-select" style="grid-column: span 2; width: 100%;">
-                  <option value="trichrome" selected>Tri-Chromatic (Amber / Cyan / Magenta)</option>
-                  <option value="monochrome_gold">All Same: Incandescent Gold</option>
-                  <option value="monochrome_cyan">All Same: Electric Cyan</option>
-                  <option value="monochrome_white">All Same: Pure Starlight Supernova</option>
-                  <option value="ultraviolet">Ultraviolet & Deep Violet Glow</option>
-                  <option value="blacklight">Blacklight Neon (UV / Acid Green / Pink)</option>
-                  <option value="emerald_bio">Bioluminescent Emerald Spores</option>
-                  <option value="inferno">Inferno & Molten Magma</option>
-                </select>
-              </div>
-              <div class="control-row">
-                <label>Orb Light Intensity</label>
-                <input type="range" id="param-orb-intensity" min="0.0" max="3.0" step="0.05" value="1.20">
-                <span class="val-display" id="val-orb-intensity">1.20</span>
-              </div>
-              <div class="control-row">
-                <label>Orb Flight Speed</label>
-                <input type="range" id="param-orb-speed" min="0.1" max="3.0" step="0.05" value="1.00">
-                <span class="val-display" id="val-orb-speed">1.00</span>
-              </div>
-              <div class="control-row">
-                <label>Orb Size (Radius)</label>
-                <input type="range" id="param-orb-radius" min="0.006" max="0.040" step="0.002" value="0.016">
-                <span class="val-display" id="val-orb-radius">0.016</span>
-              </div>
-              <div class="control-row">
-                <label>Fading Tail Length</label>
-                <input type="range" id="param-orb-tail" min="0.0" max="2.5" step="0.05" value="1.00">
-                <span class="val-display" id="val-orb-tail">1.00</span>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 // src/renderer/Raymarcher.ts
 // Primary WebGL2 rendering coordinator linking Raymarching, Accumulation, and Post-Processing
 
-import { FormulaDefinition, PalettePreset, RenderSettings, ORB_COLOR_PRESETS } from '../core/types.ts';
+import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.ts';
 import { RAYMARCH_VERT, buildRaymarchFrag } from './shaders/raymarch.glsl.ts';
 import { Accumulator } from './Accumulator.ts';
 import { PostProcessor } from './PostProcessor.ts';
@@ -180,10 +180,6 @@ export class Raymarcher {
     const frag = gl.createShader(gl.FRAGMENT_SHADER)!;
     gl.shaderSource(frag, buildRaymarchFrag(formula));
     gl.compileShader(frag);
-    if (!gl.getShaderParameter(frag, gl.COMPILE_STATUS)) {
-      const err = gl.getShaderInfoLog(frag);
-      throw new Error(`Formula [${formula.id}] fragment shader failed to compile: ${err}`);
-    }
 
     const prog = gl.createProgram()!;
     gl.attachShader(prog, vert);
@@ -390,34 +386,6 @@ export class Raymarcher {
     set1f('u_subsurface', settings.subsurface);
     set1f('u_emissiveVeins', settings.emissiveVeins);
 
-    // Flying Cavity Lights (Photon Orbs) Uniforms
-    const orbActive = settings.orbEnabled !== false && (settings.orbIntensity ?? 1.20) > 0.001;
-    set1f('u_orbIntensity', orbActive ? (settings.orbIntensity ?? 1.20) : 0.0);
-    set1f('u_orbRadius', settings.orbRadius ?? 0.016);
-
-    const presetKey = settings.orbPreset || 'trichrome';
-    const orbPreset = ORB_COLOR_PRESETS[presetKey] || ORB_COLOR_PRESETS.trichrome;
-    set3f('u_orbCol0', orbPreset.colors[0][0], orbPreset.colors[0][1], orbPreset.colors[0][2]);
-    set3f('u_orbCol1', orbPreset.colors[1][0], orbPreset.colors[1][1], orbPreset.colors[1][2]);
-    set3f('u_orbCol2', orbPreset.colors[2][0], orbPreset.colors[2][1], orbPreset.colors[2][2]);
-
-    if (orbActive) {
-      const { positions: orbPos, tails: orbTails } = this.computeOrbPositions(formula, settings, formulaParams, time);
-      set3f('u_orbPos0', orbPos[0][0], orbPos[0][1], orbPos[0][2]);
-      set3f('u_orbPos1', orbPos[1][0], orbPos[1][1], orbPos[1][2]);
-      set3f('u_orbPos2', orbPos[2][0], orbPos[2][1], orbPos[2][2]);
-      set3f('u_orbTail0', orbTails[0][0], orbTails[0][1], orbTails[0][2]);
-      set3f('u_orbTail1', orbTails[1][0], orbTails[1][1], orbTails[1][2]);
-      set3f('u_orbTail2', orbTails[2][0], orbTails[2][1], orbTails[2][2]);
-    } else {
-      set3f('u_orbPos0', 0, 0, 0);
-      set3f('u_orbPos1', 0, 0, 0);
-      set3f('u_orbPos2', 0, 0, 0);
-      set3f('u_orbTail0', 0, 0, 0);
-      set3f('u_orbTail1', 0, 0, 0);
-      set3f('u_orbTail2', 0, 0, 0);
-    }
-
     // Volumetrics & Lighting
     const azRad = (settings.lightAzimuth * Math.PI) / 180.0;
     const elRad = (settings.lightElevation * Math.PI) / 180.0;
@@ -496,95 +464,5 @@ export class Raymarcher {
     // Draw single raymarch pass
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }
-
-  /**
-   * Computes collision-free orbital cavity paths for 3 luminous light orbs.
-   * Evaluates the formula's CPU distance estimator to continuously push orbs away from walls
-   * into natural hollows, corridors, and cavities.
-   */
-  private computeOrbPositions(
-    formula: FormulaDefinition,
-    settings: RenderSettings,
-    formulaParams: Record<string, number>,
-    timeSec: number
-  ): {
-    positions: [number, number, number][];
-    tails: [number, number, number][];
-  } {
-    const speed = settings.orbSpeed ?? 1.00;
-    const tailLen = (settings.orbTail ?? 1.00) * 0.18 * speed;
-    const orbRadius = settings.orbRadius ?? 0.016;
-    const safeClearance = Math.max(0.045, orbRadius * 3.0);
-    const boundR = Math.min(2.0, Math.max(0.85, (formula.boundRadius ?? 3.0) * 0.40));
-
-    const getRawPos = (idx: number, t: number): [number, number, number] => {
-      const s = t * speed;
-      if (idx === 0) {
-        const u = s * 0.38;
-        return [
-          boundR * Math.cos(u),
-          boundR * 0.45 * Math.sin(u * 2.1),
-          boundR * Math.sin(u)
-        ];
-      } else if (idx === 1) {
-        const u = s * 0.42 + 2.094;
-        return [
-          boundR * 0.55 * Math.sin(u * 2.3),
-          boundR * Math.cos(u),
-          boundR * 0.80 * Math.sin(u * 1.2)
-        ];
-      } else {
-        const u = s * 0.34 + 4.188;
-        return [
-          boundR * Math.sin(u * 1.4),
-          boundR * 0.48 * Math.cos(u * 2.5),
-          boundR * Math.cos(u * 1.4)
-        ];
-      }
-    };
-
-    const conformPos = (pos: [number, number, number]): [number, number, number] => {
-      if (!formula.cpuDE) return pos;
-      let [x, y, z] = pos;
-      for (let iter = 0; iter < 3; iter++) {
-        const d = formula.cpuDE([x, y, z], formulaParams);
-        if (d < safeClearance) {
-          const eps = 0.006;
-          const dx = (formula.cpuDE([x + eps, y, z], formulaParams) - formula.cpuDE([x - eps, y, z], formulaParams)) / (2 * eps);
-          const dy = (formula.cpuDE([x, y + eps, z], formulaParams) - formula.cpuDE([x, y - eps, z], formulaParams)) / (2 * eps);
-          const dz = (formula.cpuDE([x, y, z + eps], formulaParams) - formula.cpuDE([x, y, z - eps], formulaParams)) / (2 * eps);
-          const gLen = Math.hypot(dx, dy, dz) || 1.0;
-          const push = (safeClearance - d) + 0.008;
-          x += (dx / gLen) * push;
-          y += (dy / gLen) * push;
-          z += (dz / gLen) * push;
-        } else {
-          break;
-        }
-      }
-      return [x, y, z];
-    };
-
-    const positions: [number, number, number][] = [];
-    const tails: [number, number, number][] = [];
-
-    for (let i = 0; i < 3; i++) {
-      const p = conformPos(getRawPos(i, timeSec));
-      const pPrev = conformPos(getRawPos(i, timeSec - 0.07));
-      const vx = p[0] - pPrev[0];
-      const vy = p[1] - pPrev[1];
-      const vz = p[2] - pPrev[2];
-      const vLen = Math.hypot(vx, vy, vz) || 1e-4;
-      const tailEnd: [number, number, number] = [
-        p[0] - (vx / vLen) * tailLen,
-        p[1] - (vy / vLen) * tailLen,
-        p[2] - (vz / vLen) * tailLen
-      ];
-      positions.push(p);
-      tails.push(tailEnd);
-    }
-
-    return { positions, tails };
   }
 }

@@ -166,6 +166,13 @@ export class OrbitController {
     };
   }
 
+  public zoomByFactor(factor: number) {
+    this.targetOrbitRadius = Math.max(0.04, Math.min(45.0, this.targetOrbitRadius * factor));
+    this.hasUserInteracted = true;
+    this.onUserInteract?.();
+    this.onChange?.();
+  }
+
   public recenter() {
     const curDist = Math.max(0.04, this.camera.position.length());
     const forward = this.camera.position.clone().normalize();
