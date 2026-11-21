@@ -161,6 +161,11 @@ class App {
       // Keyframe animation loop interpolation
       this.hud.keyframeEngine.update(dt);
 
+      // Audio engine update and visualizer sync
+      this.hud.audioEngine.update(dt);
+      const audioMetrics = this.hud.audioEngine.getMetrics();
+      this.hud.updateAudioVisualizer(audioMetrics);
+
       // Camera controller update
       this.orbitController.update(dt);
 
@@ -201,7 +206,8 @@ class App {
         now * 0.001,
         false,
         [this.currentOffsetX, this.currentOffsetY],
-        dt
+        dt,
+        audioMetrics
       );
 
       // Update HUD stats

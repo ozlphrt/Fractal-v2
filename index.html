@@ -35,6 +35,22 @@
             </button>
             <button class="chip-arrow" id="btn-next-formula" title="Next Formula" aria-label="Next formula">▶</button>
           </div>
+
+          <!-- Audio Reactivity Chip -->
+          <div class="dock-chip audio-chip" id="chip-audio">
+            <button class="chip-label-btn" id="btn-audio-toggle" title="Cycle Audio Reactivity: Off / Mic / File / Ambient Synth">
+              <span id="audio-icon" class="audio-state-icon">🎙️</span>
+              <span id="audio-label" class="chip-text">Audio: Off</span>
+            </button>
+            <div class="audio-spectrum-mini" id="audio-spectrum-mini" title="Audio Spectrum (Bass, Mids, Highs, Beat)">
+              <span class="spec-bar" id="spec-bar-bass"></span>
+              <span class="spec-bar" id="spec-bar-mid"></span>
+              <span class="spec-bar" id="spec-bar-treble"></span>
+              <span class="spec-bar" id="spec-bar-beat"></span>
+            </div>
+            <button class="chip-action-btn" id="btn-open-audio-file" title="Load Audio File (MP3/WAV/FLAC/OGG)" aria-label="Load Audio File">📁</button>
+            <input type="file" id="audio-file-input" accept="audio/*" style="display: none;">
+          </div>
         </div>
 
         <div class="hud-telemetry" id="hud-performance">
@@ -130,6 +146,7 @@
           <button class="tab-btn" data-tab="tab-lighting">Lighting</button>
           <button class="tab-btn" data-tab="tab-materials">Materials</button>
           <button class="tab-btn" data-tab="tab-params">Fractal Math</button>
+          <button class="tab-btn" data-tab="tab-audio">Audio</button>
         </nav>
 
         <div class="drawer-content">
@@ -409,6 +426,68 @@
               </div>
             </div>
           </div>
+
+          <!-- Audio Reactivity Tab -->
+          <div class="tab-pane" id="tab-audio">
+            <div class="control-section">
+              <span class="section-tag">STREAM SOURCE</span>
+              <h3>Audio Input & Streams</h3>
+              <div class="control-row">
+                <label>Audio Source</label>
+                <div class="segmented-control" id="audio-source-segmented" style="display: flex; gap: 4px; grid-column: span 2;">
+                  <button class="studio-btn-action active" id="btn-audio-src-off" style="flex: 1; padding: 4px 6px;">Off</button>
+                  <button class="studio-btn-action" id="btn-audio-src-mic" style="flex: 1; padding: 4px 6px;">Mic</button>
+                  <button class="studio-btn-action" id="btn-audio-src-file" style="flex: 1; padding: 4px 6px;">File</button>
+                  <button class="studio-btn-action" id="btn-audio-src-synth" style="flex: 1; padding: 4px 6px;">Synth</button>
+                </div>
+              </div>
+              <div class="control-row" id="audio-track-info-row" style="margin-top: 8px;">
+                <label>Active Track</label>
+                <span class="val-display" id="audio-track-name" style="grid-column: span 2; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a0aec0;">None (Off)</span>
+              </div>
+            </div>
+
+            <div class="control-section">
+              <span class="section-tag">ORGANIC DYNAMICS</span>
+              <h3>Subtle Breathing & Pulse</h3>
+              <div class="control-row">
+                <label>Master Sensitivity</label>
+                <input type="range" id="param-audio-sens" min="0.2" max="2.0" step="0.05" value="1.0">
+                <span class="val-display" id="val-audio-sens">1.00</span>
+              </div>
+              <div class="control-row">
+                <label>Fractal Math Breathing</label>
+                <input type="range" id="param-audio-breath" min="0.0" max="1.0" step="0.02" value="0.35">
+                <span class="val-display" id="val-audio-breath">0.35</span>
+              </div>
+              <div class="control-row">
+                <label>Beat Camera Punch</label>
+                <input type="range" id="param-audio-punch" min="0.0" max="0.8" step="0.02" value="0.25">
+                <span class="val-display" id="val-audio-punch">0.25</span>
+              </div>
+              <div class="control-row">
+                <label>Volumetric Godrays & Glow</label>
+                <input type="range" id="param-audio-glow" min="0.0" max="1.0" step="0.02" value="0.40">
+                <span class="val-display" id="val-audio-glow">0.40</span>
+              </div>
+            </div>
+
+            <div class="tab-bottom-section">
+              <div class="tab-storage-actions">
+                <button class="studio-btn-action save-defaults-btn" data-tab="tab-audio"
+                  title="Save current audio settings as defaults">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                  <span>Save</span>
+                </button>
+                <button class="studio-btn-subtle reset-defaults-btn" data-tab="tab-audio"
+                  title="Reset audio settings to defaults">Reset</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Global Keyframe Track (Pinned to bottom of Drawer across all tabs) -->
@@ -465,6 +544,14 @@
           </div>
         </div>
       </aside>
+      <!-- Audio File Drag & Drop Target Overlay -->
+      <div id="audio-dropzone-overlay" class="audio-dropzone-overlay hidden">
+        <div class="dropzone-box">
+          <div class="dropzone-icon">🎵</div>
+          <div class="dropzone-title">DROP AUDIO FILE HERE</div>
+          <div class="dropzone-sub">MP3, WAV, FLAC, OGG, AAC — Live Organic Breathing</div>
+        </div>
+      </div>
     </div>
   </div>
 

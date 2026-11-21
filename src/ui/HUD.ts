@@ -6,6 +6,7 @@ import { FormulaDefinition, PalettePreset, RenderSettings } from '../core/types.
 import { FORMULAS, FORMULA_CYCLE_ORDER, FORMULA_GROUPS, PALETTES } from '../formulas/registry.ts';
 import { CameraSnapshot, Keyframe, KeyframeEngine, slerpVec3 } from '../animation/KeyframeEngine.ts';
 import { ProceduralFlythrough } from '../animation/ProceduralFlythrough.ts';
+import { AudioEngine, AudioMetrics } from '../audio/AudioEngine.ts';
 
 /** Formula numbers (as shown in the UI) the auto-play tour visits first; everything else follows in numeric order */
 const TOUR_PRIORITY = [3, 4, 15, 16, 17, 7, 8, 9];
@@ -24,6 +25,7 @@ export class HUD {
   public currentPalette: PalettePreset;
 
   public keyframeEngine: KeyframeEngine = new KeyframeEngine();
+  public audioEngine: AudioEngine = new AudioEngine();
   public isRandomMode: boolean = false;
   public selectedKeyframeId: string | null = null;
   public dynamicParamValues: Record<string, number> = {};
@@ -88,7 +90,14 @@ export class HUD {
       flightSpeed: 0.6,
       adaptiveSpeed: true,
       wallCushion: true,
-      progressiveAccumulation: false
+      progressiveAccumulation: false,
+
+      // Audio Reactivity
+      audioEnabled: false,
+      audioSensitivity: 1.0,
+      audioBreathing: 0.35,
+      audioBeatPunch: 0.25,
+      audioGlow: 0.40
     };
 
     // Load any saved defaults from localStorage
@@ -284,6 +293,59 @@ export class HUD {
     this.bindRange('param-light-elevation', 'val-light-elevation', val => this.settings.lightElevation = val, '°');
     this.bindRange('param-fog', 'val-fog', val => this.settings.fogDensity = val);
     this.bindRange('param-godrays', 'val-godrays', val => this.settings.godraysIntensity = val);
+
+    // Audio Reactivity Sliders
+    this.bindRange('param-audio-sens', 'val-audio-sens', val => this.settings.audioSensitivity = val);
+    this.bindRange('param-audio-breath', 'val-audio-breath', val => this.settings.audioBreathing = val);
+    this.bindRange('param-audio-punch', 'val-audio-punch', val => this.settings.audioBeatPunch = val);
+    this.bindRange('param-audio-glow', 'val-audio-glow', val => this.settings.audioGlow = val);
+
+    // Audio Reactivity Header Toggle & File Picker
+    const btnAudioToggle = document.getElementById('btn-audio-toggle');
+    const btnOpenAudioFile = document.getElementById('btn-open-audio-file');
+    const audioFileInput = document.getElementById('audio-file-input') as HTMLInputElement | null;
+
+    btnAudioToggle?.addEventListener('click', () => {
+      this.cycleAudioSource();
+    });
+
+    btnOpenAudioFile?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audioFileInput?.click();
+    });
+
+    audioFileInput?.addEventListener('change', () => {
+      const file = audioFileInput.files?.[0];
+      if (file) {
+        this.audioEngine.loadFile(file);
+        this.settings.audioEnabled = true;
+      }
+    });
+
+    // Audio Source Segmented Control Buttons in Settings Drawer
+    const btnSrcOff = document.getElementById('btn-audio-src-off');
+    const btnSrcMic = document.getElementById('btn-audio-src-mic');
+    const btnSrcFile = document.getElementById('btn-audio-src-file');
+    const btnSrcSynth = document.getElementById('btn-audio-src-synth');
+
+    btnSrcOff?.addEventListener('click', () => {
+      this.settings.audioEnabled = false;
+      this.audioEngine.disable();
+    });
+    btnSrcMic?.addEventListener('click', async () => {
+      const ok = await this.audioEngine.enableMic();
+      this.settings.audioEnabled = ok;
+    });
+    btnSrcFile?.addEventListener('click', () => {
+      audioFileInput?.click();
+    });
+    btnSrcSynth?.addEventListener('click', () => {
+      this.audioEngine.enableSynth();
+      this.settings.audioEnabled = true;
+    });
+
+    // Window Drag & Drop for Audio Files
+    this.setupAudioDragDrop();
 
     // Wire Save / Copy / Paste / Reset Defaults buttons for each tab
     document.querySelectorAll<HTMLButtonElement>('.save-defaults-btn').forEach(btn => {
@@ -1705,6 +1767,136 @@ export class HUD {
       const debugFps = document.getElementById('debug-fps-val');
       if (debugFps) debugFps.textContent = Math.round(fps).toString();
     }
+  }
+
+  public async cycleAudioSource() {
+    const metrics = this.audioEngine.getMetrics();
+    if (!metrics.active || metrics.source === 'off') {
+      const ok = await this.audioEngine.enableMic();
+      if (ok) {
+        this.settings.audioEnabled = true;
+      } else {
+        this.audioEngine.enableSynth();
+        this.settings.audioEnabled = true;
+      }
+    } else if (metrics.source === 'mic') {
+      this.audioEngine.enableSynth();
+      this.settings.audioEnabled = true;
+    } else if (metrics.source === 'synth') {
+      this.settings.audioEnabled = false;
+      this.audioEngine.disable();
+    } else if (metrics.source === 'file') {
+      this.audioEngine.togglePlayPause();
+    }
+  }
+
+  private setupAudioDragDrop() {
+    const overlay = document.getElementById('audio-dropzone-overlay');
+    let dragCounter = 0;
+
+    window.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (overlay) overlay.classList.remove('hidden');
+    });
+
+    window.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter = Math.max(0, dragCounter - 1);
+      if (dragCounter === 0 && overlay) overlay.classList.add('hidden');
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (overlay) overlay.classList.remove('hidden');
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      if (overlay) overlay.classList.add('hidden');
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('audio/') || /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(file.name)) {
+          this.audioEngine.loadFile(file);
+          this.settings.audioEnabled = true;
+        }
+      }
+    });
+  }
+
+  public updateAudioVisualizer(metrics: AudioMetrics) {
+    const chip = document.getElementById('chip-audio');
+    const icon = document.getElementById('audio-icon');
+    const label = document.getElementById('audio-label');
+    const spec = document.getElementById('audio-spectrum-mini');
+    const trackNameEl = document.getElementById('audio-track-name');
+    const trackRow = document.getElementById('audio-track-info-row');
+
+    if (!chip || !icon || !label) return;
+
+    if (!metrics.active || metrics.source === 'off') {
+      chip.classList.remove('active');
+      icon.textContent = '🎙️';
+      label.textContent = 'Audio: Off';
+      if (spec) spec.style.display = 'none';
+      if (trackRow) trackRow.style.display = 'none';
+      this.updateAudioSourceButtons('off');
+      return;
+    }
+
+    chip.classList.add('active');
+    if (spec) spec.style.display = 'flex';
+
+    if (metrics.source === 'mic') {
+      icon.textContent = '🎙️';
+      label.textContent = 'Audio: Mic';
+      if (trackRow) trackRow.style.display = 'none';
+      this.updateAudioSourceButtons('mic');
+    } else if (metrics.source === 'file') {
+      icon.textContent = metrics.isPlaying ? '🎵' : '⏸️';
+      label.textContent = metrics.trackName ? `Audio: ${metrics.trackName}` : 'Audio: File';
+      if (trackRow) {
+        trackRow.style.display = 'flex';
+        if (trackNameEl) trackNameEl.textContent = metrics.trackName || 'Loaded Track';
+      }
+      this.updateAudioSourceButtons('file');
+    } else if (metrics.source === 'synth') {
+      icon.textContent = '🎛️';
+      label.textContent = 'Audio: Synth';
+      if (trackRow) {
+        trackRow.style.display = 'flex';
+        if (trackNameEl) trackNameEl.textContent = 'Ambient Drone (Built-in)';
+      }
+      this.updateAudioSourceButtons('synth');
+    }
+
+    // Update spectrum bars
+    const bBass = document.getElementById('spec-bar-bass');
+    const bMid = document.getElementById('spec-bar-mid');
+    const bTreb = document.getElementById('spec-bar-treble');
+    const bBeat = document.getElementById('spec-bar-beat');
+
+    if (bBass) bBass.style.height = `${Math.max(2, Math.round(metrics.bass * 14))}px`;
+    if (bMid) bMid.style.height = `${Math.max(2, Math.round(metrics.mid * 14))}px`;
+    if (bTreb) bTreb.style.height = `${Math.max(2, Math.round(metrics.treble * 14))}px`;
+    if (bBeat) {
+      const beatH = Math.max(2, Math.round(metrics.beat * 14));
+      bBeat.style.height = `${beatH}px`;
+      bBeat.style.opacity = `${0.3 + metrics.beat * 0.7}`;
+    }
+  }
+
+  private updateAudioSourceButtons(source: 'off' | 'mic' | 'file' | 'synth') {
+    const ids = ['off', 'mic', 'file', 'synth'] as const;
+    ids.forEach(s => {
+      const btn = document.getElementById(`btn-audio-src-${s}`);
+      if (btn) {
+        if (s === source) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
   }
 }
 

@@ -56,6 +56,14 @@ uniform float u_godraysIntensity;
 uniform float u_boundRadius;
 uniform int u_maxSteps;
 
+// Audio Reactivity Uniforms
+uniform float u_audioBass;
+uniform float u_audioMid;
+uniform float u_audioTreble;
+uniform float u_audioLevel;
+uniform float u_audioBeat;
+uniform float u_audioGlowMod;
+
 // Natural Geological Cosine Palette
 uniform vec3 u_palA;
 uniform vec3 u_palB;
@@ -141,8 +149,9 @@ void main() {
     vec3 cu = normalize(cross(cw, u_camUp));
     vec3 cv = cross(cu, cw);
 
-    // Focal plane & Thin-lens Depth of Field (DoF)
-    vec3 primaryDir = normalize(p.x * cu + p.y * cv + 1.8 * cw);
+    // Focal plane & Thin-lens Depth of Field (DoF) with subtle optical beat breathing
+    float camFocalScale = 1.8 + u_audioBeat * 0.08 * u_audioGlowMod;
+    vec3 primaryDir = normalize(p.x * cu + p.y * cv + camFocalScale * cw);
     vec3 focalPoint = u_camPos + primaryDir * u_focalDistance;
 
     // Lens aperture disk offset
@@ -167,17 +176,19 @@ void main() {
         vec3 currPos = rayOrigin + rayDir * t;
         float d = mapFractal(currPos, trap);
 
-        // Calibrated volumetric step glow
+        // Calibrated volumetric step glow with organic audio breathing
         if (u_glowIntensity > 0.001 && d < 0.35) {
             float g = max(0.0, 1.0 - d * 2.8);
-            glow += g * g * 0.012 * u_glowIntensity;
+            float audioGlow = 1.0 + (u_audioMid * 0.45 + u_audioBeat * 0.25) * u_audioGlowMod;
+            glow += g * g * 0.012 * u_glowIntensity * audioGlow;
         }
 
-        // Soft atmospheric god rays
+        // Soft atmospheric god rays with bass modulation
         if (u_godraysIntensity > 0.01) {
             float lightAlign = dot(rayDir, u_lightDir);
             float phase = henyeyGreenstein(lightAlign, 0.65);
-            godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.0006 * u_godraysIntensity;
+            float audioRays = 1.0 + u_audioBass * 0.40 * u_audioGlowMod;
+            godrays += phase * exp(-t * u_fogDensity * 0.5) * 0.0006 * u_godraysIntensity * audioRays;
         }
 
         float hitThresh = 0.0011 * (1.0 + t * 0.015);
@@ -216,10 +227,13 @@ void main() {
         // Natural rock crevice weathering
         albedo = mix(albedo * 0.65, albedo, smoothstep(0.1, 0.9, ao));
 
-        // 1. Primary Sun Light
+        // 1. Primary Sun Light with subtle bass breathing
         vec3 sunColor = vec3(1.0, 0.94, 0.85);
-        vec3 directLight = diff * shadow * sunColor * 0.95 * u_sunIntensity;
-        vec3 specularLight = spec * shadow * sunColor * 0.22 * u_sunIntensity;
+        float sunAudio = 1.0 + u_audioBass * 0.15 * u_audioGlowMod;
+        vec3 directLight = diff * shadow * sunColor * 0.95 * u_sunIntensity * sunAudio;
+        // Treble glint shimmer on fine rock facets
+        float specTreble = 0.22 + u_audioTreble * 0.25 * u_audioGlowMod;
+        vec3 specularLight = spec * shadow * sunColor * specTreble * u_sunIntensity;
 
         // 2. Secondary Fill / Bounce Light (soft cool ambient bounce so shadows reveal geological detail)
         vec3 fillDir = normalize(vec3(-u_lightDir.z, -0.3, u_lightDir.x));
@@ -232,7 +246,8 @@ void main() {
         vec3 rimDir = normalize(vec3(-u_lightDir.x, sin(rimRad), -u_lightDir.z));
         float rimDiff = clamp(dot(nor, rimDir), 0.0, 1.0);
         float rimFresnel = pow(clamp(1.0 + dot(nor, rayDir), 0.0, 1.0), 4.2);
-        vec3 rimLight = (rimDiff * 0.25 + rimFresnel * 0.75) * u_rimIntensity * coolDarkBlue;
+        float rimAudio = 1.0 + u_audioMid * 0.22 * u_audioGlowMod;
+        vec3 rimLight = (rimDiff * 0.25 + rimFresnel * 0.75) * u_rimIntensity * coolDarkBlue * rimAudio;
 
         // 4. Camera-Tracking Flashlight / Headlamp (6DOF Flight Mode ONLY)
         vec3 headlampLight = vec3(0.0);

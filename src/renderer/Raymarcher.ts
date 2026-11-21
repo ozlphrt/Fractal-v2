@@ -6,6 +6,7 @@ import { RAYMARCH_VERT, buildRaymarchFrag } from './shaders/raymarch.glsl.ts';
 import { Accumulator } from './Accumulator.ts';
 import { PostProcessor } from './PostProcessor.ts';
 import { halton, Vec3 } from '../core/math.ts';
+import { AudioMetrics } from '../audio/AudioEngine.ts';
 
 export class Raymarcher {
   private gl: WebGL2RenderingContext;
@@ -234,7 +235,8 @@ export class Raymarcher {
     time: number,
     isFlightMode: boolean = false,
     screenOffset: [number, number] = [0, 0],
-    _dt: number = 0.016
+    _dt: number = 0.016,
+    audioMetrics?: AudioMetrics
   ) {
     this.resize();
 
@@ -268,10 +270,17 @@ export class Raymarcher {
     const maxSteps = 135;
     if (this.prevFormula && this.prevProgram && this.transitionFBO && this.transitionWeight > 0.001) {
       this.drawScene(this.transitionFBO, this.prevProgram, this.prevFormula, this.prevParams, palette, settings,
-        camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps);
+        camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps, audioMetrics);
     }
     this.drawScene(this.rawFBO!, this.currentProgram!, formula, formulaParams, palette, settings,
-      camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps);
+      camPos, camTarget, camUp, time, isFlightMode, screenOffset, maxSteps, audioMetrics);
+
+    // Audio reactive exposure & bloom flare
+    const audioActive = (settings.audioEnabled && audioMetrics?.active) ? 1.0 : 0.0;
+    const beat = (audioMetrics?.beat ?? 0.0) * audioActive;
+    const mid = (audioMetrics?.mid ?? 0.0) * audioActive;
+    const exposureMod = 1.0 + beat * 0.08 * (settings.audioBeatPunch ?? 0.25);
+    const bloomMod = 1.0 + mid * 0.25 * (settings.audioGlow ?? 0.40);
 
     // Accumulation Pass
     let finalAccumTexture = this.rawTexture!;
@@ -284,8 +293,8 @@ export class Raymarcher {
     // Post-Processing Pass (Bloom, ACES tonemap, Chromatic aberration, Screen output, Smooth Formula Dissolve)
     this.postProcessor.render(
       finalAccumTexture,
-      settings.exposure,
-      settings.bloomIntensity,
+      settings.exposure * exposureMod,
+      settings.bloomIntensity * bloomMod,
       settings.progressiveAccumulation ? 0.35 : 0.65,
       this.transitionTexture,
       this.transitionWeight
@@ -307,7 +316,8 @@ export class Raymarcher {
     time: number,
     isFlightMode: boolean,
     screenOffset: [number, number],
-    maxSteps: number = 135
+    maxSteps: number = 135,
+    audioMetrics?: AudioMetrics
   ) {
     const gl = this.gl;
     gl.useProgram(prog);
@@ -404,19 +414,44 @@ export class Raymarcher {
     set1f('u_fogDensity', settings.fogDensity);
     set1f('u_godraysIntensity', settings.godraysIntensity);
 
+    // Audio Reactivity Uniforms
+    const audioActive = (settings.audioEnabled && audioMetrics?.active) ? 1.0 : 0.0;
+    const sens = settings.audioSensitivity ?? 1.0;
+    const bass = (audioMetrics?.bass ?? 0.0) * audioActive * sens;
+    const mid = (audioMetrics?.mid ?? 0.0) * audioActive * sens;
+    const treble = (audioMetrics?.treble ?? 0.0) * audioActive * sens;
+    const level = (audioMetrics?.level ?? 0.0) * audioActive * sens;
+    const beat = (audioMetrics?.beat ?? 0.0) * audioActive * sens;
+    const glowMod = (settings.audioGlow ?? 0.40) * audioActive;
+
+    set1f('u_audioBass', bass);
+    set1f('u_audioMid', mid);
+    set1f('u_audioTreble', treble);
+    set1f('u_audioLevel', level);
+    set1f('u_audioBeat', beat);
+    set1f('u_audioGlowMod', glowMod);
+
     // Palette presets
     set3f('u_palA', palette.a[0], palette.a[1], palette.a[2]);
     set3f('u_palB', palette.b[0], palette.b[1], palette.b[2]);
     set3f('u_palC', palette.c[0], palette.c[1], palette.c[2]);
     set3f('u_palD', palette.d[0], palette.d[1], palette.d[2]);
 
-    // Custom formula parameters
+    // Custom formula parameters (with subtle, organic breathing when audio is active)
+    const breathStrength = (settings.audioBreathing ?? 0.35) * audioActive;
+    let paramIndex = 0;
     for (const p of formula.params) {
-      const val = formulaParams[p.id] ?? p.default;
+      let val = formulaParams[p.id] ?? p.default;
       if (p.type === 'int') {
         set1i(p.uniform, Math.round(val));
       } else {
+        // Subtle organic breathing on primary shape parameters (±3.5% smooth expansion on bass/mid beats)
+        if (breathStrength > 0.01 && paramIndex < 2) {
+          const breathDelta = (bass * 0.7 + mid * 0.3 - 0.22) * 0.038 * breathStrength;
+          val = val * (1.0 + breathDelta);
+        }
         set1f(p.uniform, val);
+        paramIndex++;
       }
     }
 

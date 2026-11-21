@@ -65,6 +65,13 @@ export interface RenderSettings {
   adaptiveSpeed: boolean;
   wallCushion: boolean;
 
+  // Audio Reactivity
+  audioEnabled: boolean;
+  audioSensitivity: number;
+  audioBreathing: number;
+  audioBeatPunch: number;
+  audioGlow: number;
+
   // Render State
   progressiveAccumulation: boolean;
 }
